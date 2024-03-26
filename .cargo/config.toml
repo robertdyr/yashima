@@ -1,0 +1,12 @@
+[unstable]
+build-std = ["core"]
+
+
+[build]
+target = "x86_64-yashima.json"
+
+
+# [target.'cfg(all(target_arch = "x86_64", target_os = "none"))']
+# rustflags = ["-C", "link-arg=-nostartfiles"]
+# "link-arg=-nodefaultlibs"]
+# rustflags = ["-C", "link-arg=-nodefaultlibs"]
