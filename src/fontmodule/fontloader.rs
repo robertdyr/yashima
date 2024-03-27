@@ -3,21 +3,40 @@ extern "C" {
     static _binary_Uni3_TerminusBold32x16_psf_end: u8;
 }
 
-pub unsafe fn load_file() -> PsfFile {
+pub fn do_nothing<T>(t: T) -> T {
+    t
+}
+
+pub unsafe fn load_file(input: &mut [u16]) -> PsfHeader {
     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
     let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
 
     let psf_header = PsfHeader::new(start);
 
-    let psf_table = PsfTable::new(start, end - start);
+    let mut table = [0u16; u16::MAX as usize];
+    let table_start =
+        (psf_header.bytesperglyph * psf_header.numglpyh + psf_header.headersize) as usize + start;
+    PsfTable::new(table_start as usize, end - table_start, input);
 
-    let psf_file = PsfFile {
-        start: &_binary_Uni3_TerminusBold32x16_psf_start as *const u8,
-        psf_header,
-        psf_table,
-    };
+    psf_header
+    // let x = Wrapper {
+    //     content: [0u16; 16700],
+    // };
+    // let mut peter: [u16; 65535] = [0u16; u16::MAX as usize];
+    // peter[0] = 1;
+    // input[0] = peter[0];
+    // // let ar = do_nothing(peter);
+    // // let dennis: [u16; 65535] = [0u16; u16::MAX as usize];
+    // // let hans = Hans::new();
 
-    psf_file
+    // let psf_file = PsfFile {
+    //     start: &_binary_Uni3_TerminusBold32x16_psf_start as *const u8,
+    //     psf_header,
+    //     psf_table: input,
+    // };
+    // let num = 8;
+    // Wrapper { content: peter[0] }
+    // // psf_file
 }
 
 pub unsafe fn load_table(unicode_table: &mut [u16]) {
@@ -27,7 +46,7 @@ pub unsafe fn load_table(unicode_table: &mut [u16]) {
     let header_ptr = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as *const PsfHeader;
     //let header_ptr = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as *const PsfHeader;
     #[allow(invalid_reference_casting)]
-        let header = &*header_ptr;
+    let header = &*header_ptr;
     // println!("{:?}", header);
 
     let mut psf_table_start =
@@ -63,7 +82,7 @@ pub unsafe fn load_table(unicode_table: &mut [u16]) {
     }
 }
 
-
+#[derive(Debug)]
 pub struct Glyph {
     pub bitmap: [u16; 32],
 }
@@ -71,16 +90,15 @@ pub struct Glyph {
 impl Glyph {
     fn from_u8_slice(bytes: &[u8]) -> Self {
         let mut bitmap = [0_u16; 32];
-        let i = 0;
+        let mut i = 0;
         while i < bitmap.len() {
             let first_byte = bytes[i * 2];
             let second_byte = bytes[i * 2 + 1];
-            bitmap[i] = first_byte as u16 + (second_byte as u16) << 8;
+            bitmap[i] = ((first_byte as u16) << 8) + (second_byte as u16);
+            i = i + 1;
         }
 
-        Glyph {
-            bitmap
-        }
+        Glyph { bitmap }
     }
 }
 
@@ -105,30 +123,53 @@ impl ToUnicode for &[u8] {
         }
     }
 }
+pub unsafe fn get_glyph(psf_header: PsfHeader, psf_table: &[u16], char: char) -> Glyph {
+    let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8;
+
+    let offset = psf_table[char as usize] as u32 * psf_header.bytesperglyph as u32 as u32
+        + psf_header.headersize;
+    let bitmap_bytes = &*(start.offset(offset as isize) as *const [u8; 64]);
+    Glyph::from_u8_slice(bitmap_bytes)
+}
 
 pub struct PsfFile {
     start: *const u8,
     psf_header: &'static PsfHeader,
-    psf_table: PsfTable,
+    // psf_table: PsfTable,
+    psf_table: &'static [u16],
 }
 
 impl PsfFile {
     pub unsafe fn get_glyph(self, char: char) -> Glyph {
-        let offset = (self.psf_table.get_glyph_index(char) as u32 * self.psf_header.bytesperglyph as u32) as u32 + self.psf_header.headersize;
+        let offset = self.psf_table[char as usize] as u32
+            * self.psf_header.bytesperglyph as u32 as u32
+            + self.psf_header.headersize;
         let bitmap_bytes = &*(self.start.offset(offset as isize) as *const [u8; 64]);
         Glyph::from_u8_slice(bitmap_bytes)
     }
 }
 
+pub struct Hans {
+    peter: [u16; 20],
+}
+impl Hans {
+    fn new() -> Self {
+        Hans {
+            peter: [0u16; 20],
+            // peter: [0u16; 33698],
+        }
+    }
+}
 struct PsfTable {
     table: [u16; u16::MAX as usize],
 }
 
 impl PsfTable {
-    pub unsafe fn new(start: usize, size: usize) -> Self {
-        let mut table = Self { table: [0u16; u16::MAX as usize] };
-        let psf_unicode_table =
-            core::slice::from_raw_parts(start as *const u8, size);
+    pub unsafe fn new(start: usize, size: usize, itable: &mut [u16]) {
+        // let mut table = Self {
+        //     table: [0u16; u16::MAX as usize],
+        // };
+        let psf_unicode_table = core::slice::from_raw_parts(start as *const u8, size);
 
         for (i, codes) in psf_unicode_table.split(|byte| *byte == 0xFF).enumerate() {
             let mut byte = 0;
@@ -150,10 +191,10 @@ impl PsfTable {
                     // TODO panic here
                     // panic!("shouldn't exist");
                 };
-                table.table[unicode as usize] = i as u16;
+                itable[unicode as usize] = i as u16;
             }
         }
-        table
+        // table
     }
 
     fn get_glyph_index(self, char: char) -> u16 {
@@ -161,9 +202,9 @@ impl PsfTable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
-struct PsfHeader {
+pub struct PsfHeader {
     magic: u32,
     version: u32,
     headersize: u32,
@@ -172,16 +213,20 @@ struct PsfHeader {
     bytesperglyph: u32,
     height: u32,
     width: u32,
-
 }
 
-
 impl PsfHeader {
-    pub unsafe fn new(start: usize) -> &'static Self {
+    pub unsafe fn new(start: usize) -> Self {
         let header_ptr = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as *const PsfHeader;
-        //let header_ptr = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as *const PsfHeader;
-        #[allow(invalid_reference_casting)]
-            let header = &*header_ptr;
-        header
+        *header_ptr
+    }
+}
+
+pub struct Wrapper<T> {
+    content: T,
+}
+impl<T> Wrapper<T> {
+    fn new(n: T) -> Self {
+        Wrapper { content: n }
     }
 }

@@ -3,9 +3,9 @@
 
 use core::panic::PanicInfo;
 
-use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
+use limine::BaseRevision;
 
 mod fontmodule;
 
@@ -30,12 +30,20 @@ pub extern "C" fn memset(slice: &mut [u8], value: u8) {
 
 #[no_mangle]
 pub extern "C" fn main() -> ! {
-    let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST.get_response().unwrap().framebuffers().next().unwrap();
+    let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
+        .get_response()
+        .unwrap()
+        .framebuffers()
+        .next()
+        .unwrap();
 
     unsafe {
-        let psf_file = fontmodule::fontloader::load_file();
-        let glyph = psf_file.get_glyph("a".chars().next().unwrap());
-        draw_letter(&glyph.bitmap, framebuffer.addr(), 10, 10, framebuffer.pitch());
+        let mut inputs: [u16; 65535] = [0u16; u16::MAX as usize];
+
+        let header = fontmodule::fontloader::load_file(&mut inputs);
+        let g = fontmodule::fontloader::get_glyph(header, &inputs, "a".chars().next().unwrap());
+        // let glyph = psf_file.get_glyph("a".chars().next().unwrap());
+        draw_letter(&g.bitmap, framebuffer.addr(), 10, 10, framebuffer.pitch());
         draw_letter_a(framebuffer.addr(), 10, 10, framebuffer.pitch());
         // let mut unicode_table = [0_u16; u16::MAX as usize];
         //
@@ -59,13 +67,7 @@ unsafe fn draw_pixel(framebuffer: *mut u8, x: u64, y: u64, pitch: u64, color: u3
 unsafe fn draw_letter_a(framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
     // Bitmap representation of the letter "A"
     let letter_a: [u8; 8] = [
-        0b00111000,
-        0b01000100,
-        0b01000100,
-        0b01000100,
-        0b01111100,
-        0b01000100,
-        0b01000100,
+        0b00111000, 0b01000100, 0b01000100, 0b01000100, 0b01111100, 0b01000100, 0b01000100,
         0b01000100,
     ];
 
@@ -82,21 +84,7 @@ unsafe fn draw_letter_a(framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
     }
 }
 
-
 unsafe fn draw_letter(letter: &[u16], framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
-    // Bitmap representation of the letter "A"
-    let letter_a: [u8; 8] = [
-        0b00111000,
-        0b01000100,
-        0b01000100,
-        0b01000100,
-        0b01111100,
-        0b01000100,
-        0b01000100,
-        0b01000100,
-    ];
-
-    // Color of the letter "A" (white)
     let color: u32 = 0xFFFFFF; // RGB color: white
 
     for (row, &bitmap) in letter.iter().enumerate() {
@@ -107,6 +95,22 @@ unsafe fn draw_letter(letter: &[u16], framebuffer: *mut u8, x: u64, y: u64, pitc
             }
         }
     }
+}
+
+struct ScreenWriter {
+    background_color: u32,
+    color: u32,
+}
+
+impl ScreenWriter {
+    fn new(color: u32, background_color: u32) -> Self {
+        Self {
+            color,
+            background_color,
+        }
+    }
+
+    fn write(&mut self, str: &str) {}
 }
 
 #[panic_handler]
