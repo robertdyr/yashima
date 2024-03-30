@@ -1,0 +1,193 @@
+use crate::Color;
+
+extern "C" {
+    pub static _binary_Uni3_TerminusBold32x16_psf_start: u8;
+    pub static _binary_Uni3_TerminusBold32x16_psf_end: u8;
+}
+
+trait ToUnicode {
+    fn to_unicode(&self) -> u16;
+}
+
+impl ToUnicode for [u8] {
+    fn to_unicode(&self) -> u16 {
+        if self[0] >> 5 == 0b110 {
+            (((self[0] & 0b0011_1111) as u16) << 6) + ((self[1] & 0b0011_1111) as u16)
+        } else if self[0] >> 4 == 0b1110 {
+            (((self[0] & 0b0000_1111) as u16) << 12)
+                + (((self[1] & 0b001_11111) as u16) << 6)
+                + ((self[2] & 0b0011_1111) as u16)
+        } else if self[0] >> 7 == 0b0 {
+            (self[0] & 0b0111_1111) as u16
+        } else {
+            0
+            // TODO panic here
+            // panic!("not a valid UTF-8 or i was too lazy to implement the missing option!");
+        }
+    }
+}
+
+type BBitmap_t = [u8; 64];
+
+#[derive(Debug)]
+pub struct BGlyph<'a> {
+    height_px: u32,
+    width_px: u32,
+    pub bitmap: &'a BBitmap_t,
+}
+
+#[repr(C, packed)]
+pub struct BBitmapTable<'a> {
+    map: &'a [BBitmap_t],
+}
+
+impl<'a> BBitmapTable<'a> {
+    /// ```start``` is the start where the glyph bitmaps in the psf file are stored (psf file start + header size)
+    pub unsafe fn new(start: usize) -> Self {
+        Self {
+            map: core::slice::from_raw_parts(start as *const BBitmap_t, 512),
+        }
+    }
+}
+
+pub struct BUnicodeTable {
+    map: [u16; u16::MAX as usize],
+}
+
+impl BUnicodeTable {
+    /// - ```start``` is start of the mapping table (psf file start + headersize + glpyhsize * bytes per glypth)
+    /// - ```size``` is used to know the end of the table (psf file end - ```start```)
+    pub unsafe fn new(start: usize, size: usize) -> Self {
+        let mut b_unicode_map = Self {
+            map: [0u16; u16::MAX as usize],
+        };
+        let psf_unicode_table = core::slice::from_raw_parts(start as *const u8, size);
+
+        for (i, codes) in psf_unicode_table.split(|byte| *byte == 0xFF).enumerate() {
+            let mut byte = 0;
+            while byte < codes.len() {
+                let unicode: u16 = if codes[byte] >> 5 == 0b110 {
+                    let unicode = codes[byte..byte + 2].to_unicode();
+                    byte = byte + 2;
+                    unicode
+                } else if codes[byte] >> 4 == 0b1110 {
+                    let unicode = codes[byte..byte + 3].to_unicode();
+                    byte = byte + 3;
+                    unicode
+                } else if codes[byte] >> 7 == 0b0 {
+                    let unicode = codes[byte..byte + 1].to_unicode();
+                    byte = byte + 1;
+                    unicode
+                } else {
+                    0
+                    // TODO panic here, i think i was too lazy to do the 4 byte use case since i dont have 4 byte utf-8 rn
+                    // panic!("shouldn't exist");
+                };
+                b_unicode_map.map[unicode as usize] = i as u16;
+            }
+        }
+        b_unicode_map
+    }
+}
+
+pub struct BFont<'a> {
+    // maps unicode index to Bitmap
+    bitmap_table: BBitmapTable<'a>,
+    // maps unicode to index into `bitmap_map` for the glyph
+    unicode_table: BUnicodeTable,
+    height_px: u32,
+    width_px: u32,
+}
+
+impl<'a> BFont<'a> {
+    // pub unsafe fn from_file() -> Self {
+    //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
+    //     let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
+
+    //     let psf_header = PsfHeader::new(start);
+    //     let b_bitmap_map = BBitmapMap::new(start + psf_header.headersize as usize);
+    //     let unicode_map_start =
+    //         start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
+    //     let b_unicode_map = BUnicodeMap::new(unicode_map_start, end - unicode_map_start);
+    //     let b_font = BFont::new(
+    //         psf_header.height,
+    //         psf_header.width,
+    //         b_bitmap_map,
+    //         b_unicode_map,
+    //     );
+
+    //     b_font
+    // }
+
+    pub fn new(
+        height_px: u32,
+        width_px: u32,
+        bitmap_table: BBitmapTable<'a>,
+        unicode_table: BUnicodeTable,
+    ) -> Self {
+        BFont {
+            height_px,
+            width_px,
+            bitmap_table,
+            unicode_table,
+        }
+    }
+
+    pub fn get_glyph(&self, char: char) -> BGlyph {
+        BGlyph {
+            height_px: self.height_px,
+            width_px: self.height_px,
+            bitmap: &self.bitmap_table.map[self.unicode_table.map[char as usize] as usize],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct PsfHeader {
+    magic: u32,
+    version: u32,
+    pub headersize: u32,
+    flags: u32,
+    numglpyh: u32,
+    pub bytesperglyph: u32,
+    pub height: u32,
+    pub width: u32,
+}
+
+impl PsfHeader {
+    /// ```start``` of the psf header (this is also the start of the psf file)
+    pub unsafe fn new(start: usize) -> Self {
+        let header_ptr = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as *const PsfHeader;
+        *header_ptr
+    }
+}
+
+pub unsafe fn draw_letter(bitmap: &BBitmap_t, framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
+    let color = Color::White as u32;
+
+    for row in 0..32 {
+        let first_byte = bitmap[row * 2];
+        let second_byte = bitmap[row * 2 + 1];
+        for col in 0..8 {
+            if (first_byte >> (7 - col)) & 1 != 0 {
+                draw_pixel(framebuffer, x + col as u64, y + row as u64, pitch, color);
+            }
+            if (second_byte >> (7 - col)) & 1 != 0 {
+                draw_pixel(
+                    framebuffer,
+                    x + col + 8 as u64,
+                    y + row as u64,
+                    pitch,
+                    color,
+                );
+            }
+        }
+    }
+}
+
+unsafe fn draw_pixel(framebuffer: *mut u8, x: u64, y: u64, pitch: u64, color: u32) {
+    let fb_u32 = framebuffer as *mut u32; // Cast the u8 pointer to a u32 pointer
+    let pixel_offset = x + y * (pitch / 4); // Assuming pitch is the number of bytes per row
+    fb_u32.offset(pixel_offset as isize).write_volatile(color);
+}

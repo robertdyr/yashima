@@ -1,1 +1,1 @@
-pub mod fontloader;
+pub mod font;

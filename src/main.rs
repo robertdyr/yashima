@@ -1,20 +1,34 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 use core::panic::PanicInfo;
 
-use crate::fontmodule::fontloader::_binary_Uni3_TerminusBold32x16_psf_start;
-use fontmodule::fontloader::{Font, PsfHeader};
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
 use limine::BaseRevision;
 mod fontmodule;
 
+// extern crate rlibc;
+
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 
+use limine::request::StackSizeRequest;
+
+use font::{_binary_Uni3_TerminusBold32x16_psf_end, _binary_Uni3_TerminusBold32x16_psf_start};
+use fontmodule::font;
+
+// Some reasonable size
+pub const STACK_SIZE: u64 = 0x1000000;
+// Request a larger stack
+pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(STACK_SIZE);
+
 #[no_mangle]
 pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
+    // unsafe {
+    //     draw_letter_a(fr_addr as *mut u8, 100, 100, fr_pitch);
+    // }
     for i in 0..n {
         unsafe {
             *dst.add(i) = *src.add(i);
@@ -41,128 +55,55 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
     }
 }
 
-fn n<T>(t: T) {
-    let r = t;
-}
 #[no_mangle]
 pub extern "C" fn main() -> ! {
-    let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
-        .get_response()
-        .unwrap()
-        .framebuffers()
-        .next()
-        .unwrap();
+    init_idt();
+    // x86_64::instructions::interrupts::int3(); // new
 
     unsafe {
-        let mut inputs: [u16; 65535] = [0u16; u16::MAX as usize];
+        core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
+    }
 
-        let header = fontmodule::fontloader::load_file(&mut inputs);
-        // let g = fontmodule::fontloader::get_glyph(&header, &inputs, "a".chars().next().unwrap());
-        // let glyph = psf_file.get_glyph("a".chars().next().unwrap());
-        // draw_letter(&g.bitmap, framebuffer.addr(), 10, 10, framebuffer.pitch());
-        // draw_letter_a(framebuffer.addr(), 10, 10, framebuffer.pitch());
-        let str = "aaaa";
-        // draw_glyph_a(framebuffer.addr(), framebuffer.pitch(), &inputs, header);
-        // let fb = framebuffer.addr();
-        // let p = framebuffer.pitch();
+    unsafe {
+        let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
+            .get_response()
+            .unwrap()
+            .framebuffers()
+            .next()
+            .unwrap();
 
-        // let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 20);
+        let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
+        let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
 
-        // cb.draw_glyph_a(fb, p, &inputs, header);
-        // cb.write(str, header, &inputs);
+        // ========================================================================
+        // ========================================================================
+        // ========================================================================
+        // ========================================================================
 
-        // let psf_start = _binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-        // let font_start_ptr = psf_start + header.headersize as usize;
-
-        // let font = Font::new(font_start_ptr, &inputs);
-
-        let lettera =
-            fontmodule::fontloader::get_glyph(&header, &inputs, "a".chars().next().unwrap());
-        // let lettera = font.get_glyph2("a".chars().next().unwrap(), header);
-        draw_letter(
-            Color::White as u32,
-            &lettera.bitmap,
-            framebuffer.addr(),
-            100,
-            100,
-            framebuffer.pitch(),
+        let psf_header = font::PsfHeader::new(start);
+        let b_bitmap_map = font::BBitmapTable::new(start + psf_header.headersize as usize);
+        let unicode_map_start =
+            start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
+        let b_unicode_map = font::BUnicodeTable::new(unicode_map_start, end - unicode_map_start);
+        let b_font = font::BFont::new(
+            psf_header.height,
+            psf_header.width,
+            b_bitmap_map,
+            b_unicode_map,
         );
+        unsafe {
+            let h = b_font.get_glyph("h".chars().next().unwrap());
 
-        // let mut writer = ScreenWriter::new(Color::White, 0, framebuffer, font);
-        // writer.write(str, &header, &inputs);
+            //fontloader2::draw_letter(&h.bitmap, framebuffer.addr(), 50, 50, framebuffer.pitch());
 
-        // writer.write2("hello world");
-        // let mut unicode_table = [0_u16; u16::MAX as usize];
-        //
-        // fontmodule::fontloader::load_table(&mut unicode_table);
+            let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 20, b_font);
+
+            cb.write("hello, world!");
+
+            // crate::draw_letter_a(framebuffer.addr(), 10, 10, framebuffer.pitch());
+        }
     }
     loop {}
-}
-
-fn draw_glyph_a(framebuffer: *mut u8, pitch: u64, table: &[u16], header: PsfHeader) {
-    let lettera =
-        unsafe { fontmodule::fontloader::get_glyph(&header, table, "a".chars().next().unwrap()) };
-
-    unsafe {
-        draw_letter(
-            Color::White as u32,
-            &lettera.bitmap,
-            framebuffer,
-            100,
-            100,
-            pitch,
-        );
-    }
-}
-
-// Function to draw a pixel on the screen
-// framebuffer: mutable pointer to the framebuffer base address
-// x, y: coordinates of the pixel
-// pitch: the number of bytes in a row of pixels
-// color: color of the pixel
-unsafe fn draw_pixel(framebuffer: *mut u8, x: u64, y: u64, pitch: u64, color: u32) {
-    let fb_u32 = framebuffer as *mut u32; // Cast the u8 pointer to a u32 pointer
-    let pixel_offset = x + y * (pitch / 4); // Assuming pitch is the number of bytes per row
-    fb_u32.offset(pixel_offset as isize).write_volatile(color);
-}
-
-// Function to draw the letter "A" on the screen
-unsafe fn draw_letter_a(framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
-    // Bitmap representation of the letter "A"
-    let letter_a: [u8; 8] = [
-        0b00111000, 0b01000100, 0b01000100, 0b01000100, 0b01111100, 0b01000100, 0b01000100,
-        0b01000100,
-    ];
-
-    // Color of the letter "A" (white)
-    let color: u32 = 0xFFFFFF; // RGB color: white
-
-    for (row, &bitmap) in letter_a.iter().enumerate() {
-        for col in 0..8 {
-            // Check if the bit at the current position is set
-            if (bitmap >> (7 - col)) & 1 != 0 {
-                draw_pixel(framebuffer, x + col as u64, y + row as u64, pitch, color);
-            }
-        }
-    }
-}
-
-unsafe fn draw_letter(
-    color: u32,
-    letter: &[u16],
-    framebuffer: *mut u8,
-    x: u64,
-    y: u64,
-    pitch: u64,
-) {
-    for (row, &bitmap) in letter.iter().enumerate() {
-        for col in 0..16 {
-            // Check if the bit at the current position is set
-            if (bitmap >> (15 - col)) & 1 != 0 {
-                draw_pixel(framebuffer, x + col as u64, y + row as u64, pitch, color);
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -171,69 +112,7 @@ pub enum Color {
     White = 0xFFFFFF,
 }
 
-struct ScreenWriter<'a, 'font_table> {
-    background_color: u32,
-    color: Color,
-    caret: u64,
-    framebuffer: Framebuffer<'a>,
-    font: Font<'font_table>,
-}
-
-impl<'a, 'f> ScreenWriter<'a, 'f> {
-    fn new(
-        color: Color,
-        background_color: u32,
-        framebuffer: Framebuffer<'a>,
-        font: Font<'f>,
-    ) -> Self {
-        Self {
-            caret: 0,
-            color,
-            background_color,
-            framebuffer,
-            font,
-        }
-    }
-    fn clean(&mut self, remove_header: &PsfHeader, remove_table: &[u16]) {}
-
-    fn write(&mut self, str: &str, remove_header: &PsfHeader, remove_table: &[u16]) {
-        unsafe {
-            for char in str.chars() {
-                let g = fontmodule::fontloader::get_glyph(remove_header, remove_table, char);
-
-                draw_letter(
-                    self.color as u32,
-                    &g.bitmap,
-                    self.framebuffer.addr(),
-                    self.caret * 16,
-                    10,
-                    self.framebuffer.pitch(),
-                );
-                self.caret = self.caret + 1;
-            }
-        }
-    }
-
-    fn write2(&mut self, str: &str) {
-        unsafe {
-            for char in str.chars() {
-                let g = self.font.get_glyph(char);
-
-                draw_letter(
-                    self.color as u32,
-                    &g.bitmap,
-                    self.framebuffer.addr(),
-                    self.caret * 16,
-                    10,
-                    self.framebuffer.pitch(),
-                );
-                self.caret = self.caret + 1;
-            }
-        }
-    }
-}
-
-struct CharBuffer<'a> {
+struct CharBuffer<'a, 'b> {
     framebuffer: Framebuffer<'a>,
     charbuffer: [char; 300],
     chars_per_row: u32,
@@ -242,15 +121,17 @@ struct CharBuffer<'a> {
     character_width_px: u32,
     color: Color,
     caret: u32,
+    font: font::BFont<'b>,
 }
 
-impl<'a> CharBuffer<'a> {
+impl<'a, 'b> CharBuffer<'a, 'b> {
     pub fn new(
         color: Color,
         framebuffer: Framebuffer<'a>,
         character_height_px: u32,
         character_width_px: u32,
         chars_per_row: u32,
+        font: font::BFont<'b>,
     ) -> Self {
         Self {
             color,
@@ -259,33 +140,34 @@ impl<'a> CharBuffer<'a> {
             character_width_px,
             chars_per_row,
             caret: 0,
-            charbuffer: [char::from_u32(0x2800).unwrap(); 300],
+            charbuffer: [char::from_u32(0x020).unwrap(); 300],
+            font,
         }
     }
-    pub fn write(&mut self, str: &str, remove_header: PsfHeader, remove_table: &[u16]) {
+    pub fn write(&mut self, str: &str) {
         for char in str.chars() {
-            self.add_character(char, remove_header, remove_table);
+            self.add_character(char);
         }
     }
 
-    fn add_character(&mut self, char: char, remove_header: PsfHeader, remove_table: &[u16]) {
+    fn add_character(&mut self, char: char) {
         self.charbuffer[self.caret as usize] = char;
         self.caret = self.caret + 1;
         unsafe {
-            self.render(remove_header, remove_table);
+            self.render();
         }
     }
 
-    unsafe fn render(&mut self, remove_header: PsfHeader, remove_table: &[u16]) {
-        self.clear_screen();
+    unsafe fn render(&mut self) {
+        //self.clear_screen();
         for (i, &char) in self.charbuffer.iter().enumerate() {
             let row_index = i as u32 / self.chars_per_row;
             let column_index = i as u32 % self.chars_per_row;
 
-            let g = fontmodule::fontloader::get_glyph(&remove_header, remove_table, char);
-            draw_letter(
-                self.color as u32,
-                &g.bitmap,
+            let g = self.font.get_glyph(char);
+
+            font::draw_letter(
+                g.bitmap,
                 self.framebuffer.addr(),
                 (column_index * self.character_width_px) as u64,
                 (row_index * self.character_height_px) as u64,
@@ -295,25 +177,9 @@ impl<'a> CharBuffer<'a> {
     }
 
     fn clear_screen(&mut self) {
+        // todo this dosnt work since i delete whatever was in the char buffer
         for char in self.charbuffer.iter_mut() {
-            *char = char::from_u32(0x2800).unwrap();
-        }
-    }
-
-    pub fn draw_glyph_a(&self, framebuffer: *mut u8, pitch: u64, table: &[u16], header: PsfHeader) {
-        let lettera = unsafe {
-            fontmodule::fontloader::get_glyph(&header, table, "a".chars().next().unwrap())
-        };
-
-        unsafe {
-            draw_letter(
-                Color::White as u32,
-                &lettera.bitmap,
-                framebuffer,
-                100,
-                100,
-                pitch,
-            );
+            *char = char::from_u32(0x020).unwrap();
         }
     }
 }
@@ -321,4 +187,41 @@ impl<'a> CharBuffer<'a> {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     loop {}
+}
+
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+
+extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
+    loop {}
+}
+
+extern "x86-interrupt" fn page_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: PageFaultErrorCode,
+) {
+    loop {}
+}
+
+extern "x86-interrupt" fn double_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) -> ! {
+    loop {}
+}
+
+pub fn init_idt() {
+    IDT.load();
+}
+
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref IDT: InterruptDescriptorTable = {
+        let mut idt = InterruptDescriptorTable::new();
+        idt.breakpoint.set_handler_fn(breakpoint_handler);
+
+       // idt.page_fault.set_handler_fn(page_fault_handler);
+        idt.device_not_available.set_handler_fn(breakpoint_handler);
+        // idt.double_fault.set_handler_fn(double_fault_handler);
+        idt
+    };
 }

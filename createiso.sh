@@ -1,10 +1,17 @@
 set -e
-# Download the latest Limine binary release for the 7.x branch.
-git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
- 
-# Build "limine" utility.
-make -C limine
- 
+
+if [ ! -d "limine" ]; then
+      # Download the latest Limine binary release for the 7.x branch.
+      git clone https://github.com/limine-bootloader/limine.git --branch=v7.x-binary --depth=1
+      
+      # Build "limine" utility.
+      make -C limine
+fi
+
+if [ -d "iso_root" ]; then
+      rm -rf iso_root
+fi
+
 # Create a directory which will be our ISO root.
 mkdir -p iso_root
  
