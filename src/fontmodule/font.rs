@@ -20,9 +20,8 @@ impl ToUnicode for [u8] {
         } else if self[0] >> 7 == 0b0 {
             (self[0] & 0b0111_1111) as u16
         } else {
-            0
-            // TODO panic here
-            // panic!("not a valid UTF-8 or i was too lazy to implement the missing option!");
+            // TODO implement
+            panic!("not a valid UTF-8 or i was too lazy to implement the missing option!");
         }
     }
 }
@@ -79,9 +78,8 @@ impl UnicodeTable {
                     byte = byte + 1;
                     unicode
                 } else {
-                    0
-                    // TODO panic here, i think i was too lazy to do the 4 byte use case since i dont have 4 byte utf-8 rn
-                    // panic!("shouldn't exist");
+                    // TODO implement
+                    panic!("not a valid UTF-8 or i was too lazy to implement the missing option!");
                 };
                 unicode_table.table[unicode as usize] = i as u16;
             }
@@ -100,24 +98,22 @@ pub struct Font<'a> {
 }
 
 impl<'a> Font<'a> {
-    // pub unsafe fn from_file() -> Self {
-    //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-    //     let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
+    pub unsafe fn from_file() -> Self {
+        let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
+        let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
 
-    //     let psf_header = PsfHeader::new(start);
-    //     let b_bitmap_map = BBitmapMap::new(start + psf_header.headersize as usize);
-    //     let unicode_map_start =
-    //         start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
-    //     let b_unicode_map = BUnicodeMap::new(unicode_map_start, end - unicode_map_start);
-    //     let b_font = BFont::new(
-    //         psf_header.height,
-    //         psf_header.width,
-    //         b_bitmap_map,
-    //         b_unicode_map,
-    //     );
-
-    //     b_font
-    // }
+        let psf_header = PsfHeader::new(start);
+        let bitmap_table = BitmapTable::new(start + psf_header.headersize as usize);
+        let unicode_table_start =
+            start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
+        let unicode_table = UnicodeTable::new(unicode_table_start, end - unicode_table_start);
+        Font::new(
+            psf_header.height,
+            psf_header.width,
+            bitmap_table,
+            unicode_table,
+        )
+    }
 
     pub fn new(
         height_px: u32,
