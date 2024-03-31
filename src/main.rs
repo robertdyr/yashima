@@ -2,11 +2,11 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
-use core::panic::PanicInfo;
+use core::{char, panic::PanicInfo};
 
-use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
 use limine::BaseRevision;
+use limine::{framebuffer::Framebuffer, request::EfiMemoryMapRequest};
 mod fontmodule;
 
 // extern crate rlibc;
@@ -81,24 +81,19 @@ pub extern "C" fn main() -> ! {
         // ========================================================================
 
         let psf_header = font::PsfHeader::new(start);
-        let b_bitmap_map = font::BBitmapTable::new(start + psf_header.headersize as usize);
+        let bitmap_map = font::BitmapTable::new(start + psf_header.headersize as usize);
         let unicode_map_start =
             start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
-        let b_unicode_map = font::BUnicodeTable::new(unicode_map_start, end - unicode_map_start);
-        let b_font = font::BFont::new(
-            psf_header.height,
-            psf_header.width,
-            b_bitmap_map,
-            b_unicode_map,
-        );
+        let unicode_map = font::UnicodeTable::new(unicode_map_start, end - unicode_map_start);
+        let b_font = font::Font::new(psf_header.height, psf_header.width, bitmap_map, unicode_map);
         unsafe {
-            let h = b_font.get_glyph("h".chars().next().unwrap());
+            let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 50, b_font);
 
-            //fontloader2::draw_letter(&h.bitmap, framebuffer.addr(), 50, 50, framebuffer.pitch());
+            cb.write("hello, world! hello hello\nhello hello");
 
-            let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 20, b_font);
+            cb.clear_buffer();
 
-            cb.write("hello, world!");
+            cb.write("cleared");
 
             // crate::draw_letter_a(framebuffer.addr(), 10, 10, framebuffer.pitch());
         }
@@ -110,18 +105,19 @@ pub extern "C" fn main() -> ! {
 #[repr(u32)]
 pub enum Color {
     White = 0xFFFFFF,
+    Black = 0x0,
 }
 
 struct CharBuffer<'a, 'b> {
     framebuffer: Framebuffer<'a>,
-    charbuffer: [char; 300],
+    charbuffer: [char; 3000],
     chars_per_row: u32,
     // will be used to calculate line height
     character_height_px: u32,
     character_width_px: u32,
     color: Color,
     caret: u32,
-    font: font::BFont<'b>,
+    font: font::Font<'b>,
 }
 
 impl<'a, 'b> CharBuffer<'a, 'b> {
@@ -131,7 +127,7 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
         character_height_px: u32,
         character_width_px: u32,
         chars_per_row: u32,
-        font: font::BFont<'b>,
+        font: font::Font<'b>,
     ) -> Self {
         Self {
             color,
@@ -140,26 +136,38 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
             character_width_px,
             chars_per_row,
             caret: 0,
-            charbuffer: [char::from_u32(0x020).unwrap(); 300],
+            // empty glyph
+            charbuffer: ['\u{020}'; 3000],
             font,
         }
     }
     pub fn write(&mut self, str: &str) {
         for char in str.chars() {
-            self.add_character(char);
+            match char {
+                '\n' => self.new_line(),
+                _ => self.add_character(char),
+            }
         }
-    }
-
-    fn add_character(&mut self, char: char) {
-        self.charbuffer[self.caret as usize] = char;
-        self.caret = self.caret + 1;
         unsafe {
             self.render();
         }
     }
 
+    pub fn clear_buffer(&mut self) {
+        for char in self.charbuffer.iter_mut() {
+            // empty char
+            *char = '\u{020}';
+        }
+        self.caret = 0;
+    }
+
+    fn add_character(&mut self, char: char) {
+        self.charbuffer[self.caret as usize] = char;
+        self.caret = self.caret + 1;
+    }
+
     unsafe fn render(&mut self) {
-        //self.clear_screen();
+        self.clear_screen();
         for (i, &char) in self.charbuffer.iter().enumerate() {
             let row_index = i as u32 / self.chars_per_row;
             let column_index = i as u32 % self.chars_per_row;
@@ -176,10 +184,26 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
         }
     }
 
+    fn new_line(&mut self) {
+        self.caret = (self.caret / self.chars_per_row) + self.chars_per_row;
+    }
+
     fn clear_screen(&mut self) {
-        // todo this dosnt work since i delete whatever was in the char buffer
-        for char in self.charbuffer.iter_mut() {
-            *char = char::from_u32(0x020).unwrap();
+        let empty_char = self.font.get_glyph('\u{020}');
+
+        for i in 0..self.charbuffer.iter().len() {
+            let row_index = i as u32 / self.chars_per_row;
+            let column_index = i as u32 % self.chars_per_row;
+
+            unsafe {
+                font::draw_letter(
+                    empty_char.bitmap,
+                    self.framebuffer.addr(),
+                    (column_index * self.character_width_px) as u64,
+                    (row_index * self.character_height_px) as u64,
+                    self.framebuffer.pitch(),
+                );
+            }
         }
     }
 }

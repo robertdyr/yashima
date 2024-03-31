@@ -27,39 +27,39 @@ impl ToUnicode for [u8] {
     }
 }
 
-type BBitmap_t = [u8; 64];
+type Bitmap_t = [u8; 64];
 
 #[derive(Debug)]
 pub struct BGlyph<'a> {
     height_px: u32,
     width_px: u32,
-    pub bitmap: &'a BBitmap_t,
+    pub bitmap: &'a Bitmap_t,
 }
 
 #[repr(C, packed)]
-pub struct BBitmapTable<'a> {
-    map: &'a [BBitmap_t],
+pub struct BitmapTable<'a> {
+    map: &'a [Bitmap_t],
 }
 
-impl<'a> BBitmapTable<'a> {
+impl<'a> BitmapTable<'a> {
     /// ```start``` is the start where the glyph bitmaps in the psf file are stored (psf file start + header size)
     pub unsafe fn new(start: usize) -> Self {
         Self {
-            map: core::slice::from_raw_parts(start as *const BBitmap_t, 512),
+            map: core::slice::from_raw_parts(start as *const Bitmap_t, 512),
         }
     }
 }
 
-pub struct BUnicodeTable {
-    map: [u16; u16::MAX as usize],
+pub struct UnicodeTable {
+    table: [u16; u16::MAX as usize],
 }
 
-impl BUnicodeTable {
+impl UnicodeTable {
     /// - ```start``` is start of the mapping table (psf file start + headersize + glpyhsize * bytes per glypth)
     /// - ```size``` is used to know the end of the table (psf file end - ```start```)
     pub unsafe fn new(start: usize, size: usize) -> Self {
-        let mut b_unicode_map = Self {
-            map: [0u16; u16::MAX as usize],
+        let mut unicode_table = Self {
+            table: [0u16; u16::MAX as usize],
         };
         let psf_unicode_table = core::slice::from_raw_parts(start as *const u8, size);
 
@@ -83,23 +83,23 @@ impl BUnicodeTable {
                     // TODO panic here, i think i was too lazy to do the 4 byte use case since i dont have 4 byte utf-8 rn
                     // panic!("shouldn't exist");
                 };
-                b_unicode_map.map[unicode as usize] = i as u16;
+                unicode_table.table[unicode as usize] = i as u16;
             }
         }
-        b_unicode_map
+        unicode_table
     }
 }
 
-pub struct BFont<'a> {
-    // maps unicode index to Bitmap
-    bitmap_table: BBitmapTable<'a>,
-    // maps unicode to index into `bitmap_map` for the glyph
-    unicode_table: BUnicodeTable,
+pub struct Font<'a> {
+    // maps unicode to Bitmap. unicode is index into BitmapTable
+    bitmap_table: BitmapTable<'a>,
+    // maps unicode to index into `bitmap_table` for the glyph
+    unicode_table: UnicodeTable,
     height_px: u32,
     width_px: u32,
 }
 
-impl<'a> BFont<'a> {
+impl<'a> Font<'a> {
     // pub unsafe fn from_file() -> Self {
     //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
     //     let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
@@ -122,10 +122,10 @@ impl<'a> BFont<'a> {
     pub fn new(
         height_px: u32,
         width_px: u32,
-        bitmap_table: BBitmapTable<'a>,
-        unicode_table: BUnicodeTable,
+        bitmap_table: BitmapTable<'a>,
+        unicode_table: UnicodeTable,
     ) -> Self {
-        BFont {
+        Font {
             height_px,
             width_px,
             bitmap_table,
@@ -137,7 +137,7 @@ impl<'a> BFont<'a> {
         BGlyph {
             height_px: self.height_px,
             width_px: self.height_px,
-            bitmap: &self.bitmap_table.map[self.unicode_table.map[char as usize] as usize],
+            bitmap: &self.bitmap_table.map[self.unicode_table.table[char as usize] as usize],
         }
     }
 }
@@ -163,8 +163,9 @@ impl PsfHeader {
     }
 }
 
-pub unsafe fn draw_letter(bitmap: &BBitmap_t, framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
+pub unsafe fn draw_letter(bitmap: &Bitmap_t, framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
     let color = Color::White as u32;
+    let background_color = Color::Black as u32;
 
     for row in 0..32 {
         let first_byte = bitmap[row * 2];
@@ -172,6 +173,14 @@ pub unsafe fn draw_letter(bitmap: &BBitmap_t, framebuffer: *mut u8, x: u64, y: u
         for col in 0..8 {
             if (first_byte >> (7 - col)) & 1 != 0 {
                 draw_pixel(framebuffer, x + col as u64, y + row as u64, pitch, color);
+            } else {
+                draw_pixel(
+                    framebuffer,
+                    x + col as u64,
+                    y + row as u64,
+                    pitch,
+                    background_color,
+                );
             }
             if (second_byte >> (7 - col)) & 1 != 0 {
                 draw_pixel(
@@ -180,6 +189,14 @@ pub unsafe fn draw_letter(bitmap: &BBitmap_t, framebuffer: *mut u8, x: u64, y: u
                     y + row as u64,
                     pitch,
                     color,
+                );
+            } else {
+                draw_pixel(
+                    framebuffer,
+                    x + col + 8 as u64,
+                    y + row as u64,
+                    pitch,
+                    background_color,
                 );
             }
         }
