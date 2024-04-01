@@ -181,7 +181,7 @@ pub unsafe fn draw_letter(bitmap: &Bitmap_t, framebuffer: *mut u8, x: u64, y: u6
             if (second_byte >> (7 - col)) & 1 != 0 {
                 draw_pixel(
                     framebuffer,
-                    x + col + 8 as u64,
+                    x + col + 8u64,
                     y + row as u64,
                     pitch,
                     color,
