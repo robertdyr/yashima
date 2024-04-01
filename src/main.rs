@@ -4,19 +4,19 @@
 
 use core::panic::PanicInfo;
 
+use lazy_static::lazy_static;
+use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
-use limine::BaseRevision;
-
-// extern crate rlibc;
-
 use limine::request::StackSizeRequest;
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 use font::{_binary_Uni3_TerminusBold32x16_psf_end, _binary_Uni3_TerminusBold32x16_psf_start};
 use fontmodule::char_buffer::CharBuffer;
+use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
-use fontmodule::char_buffer::Color;
+// extern crate rlibc;
 
 mod fontmodule;
 
@@ -106,8 +106,6 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
-
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     loop {}
 }
@@ -130,7 +128,6 @@ pub fn init_idt() {
     IDT.load();
 }
 
-use lazy_static::lazy_static;
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
