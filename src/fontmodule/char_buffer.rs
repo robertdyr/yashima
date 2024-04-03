@@ -1,7 +1,9 @@
-use crate::font;
-use crate::font::Font;
+use core::fmt;
 
 use limine::framebuffer::Framebuffer;
+
+use crate::font;
+use crate::font::Font;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
@@ -107,5 +109,13 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
                 );
             }
         }
+    }
+}
+
+
+impl<'a, 'b> fmt::Write for CharBuffer<'a, 'b> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.write(s);
+        Ok(())
     }
 }
