@@ -4,7 +4,8 @@ override MAKEFLAGS += -rR
 # override IMAGE_NAME := yashima
 
 
-# override TARGET := x86_64-yashima 
+# override TARGET := x86_64-yashima
+override IMAGE_NAME := yashima
 
 # Convenience macro to reliably declare user overridable variables.
 define DEFAULT_VAR =
