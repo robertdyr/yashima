@@ -10,6 +10,7 @@ x86_64 = { version = "0.15.1", features = ["abi_x86_interrupt"] }
 lazy_static = { version = "1.4.0", default-features = false, features = [
     "spin_no_std",
 ] }
+spin = "0.9.8"
 
 [profile.release]
 panic = "abort"

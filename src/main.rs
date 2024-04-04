@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
@@ -9,16 +10,19 @@ use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
 use limine::request::StackSizeRequest;
+use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
-use font::{_binary_Uni3_TerminusBold32x16_psf_end, _binary_Uni3_TerminusBold32x16_psf_start};
 use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
+use crate::fontmodule::font::{_binary_Uni3_TerminusBold32x16_psf_start, PsfHeader};
+
 // extern crate rlibc;
 
 mod fontmodule;
+mod arch;
 
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
@@ -67,36 +71,27 @@ pub extern "C" fn main() -> ! {
     }
 
     unsafe {
-        let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
-            .get_response()
-            .unwrap()
-            .framebuffers()
-            .next()
-            .unwrap();
-
         let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-        let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
-
-        // ========================================================================
-        // ========================================================================
-        // ========================================================================
-        // ========================================================================
-
-        let psf_header = font::PsfHeader::new(start);
-        let bitmap_map = font::BitmapTable::new(start + psf_header.headersize as usize);
-        let unicode_map_start =
-            start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
-        let unicode_map = font::UnicodeTable::new(unicode_map_start, end - unicode_map_start);
-        let b_font = font::Font::new(psf_header.height, psf_header.width, bitmap_map, unicode_map);
-        unsafe {
-            let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 50, b_font);
-
-            cb.write("hello, world! hello hello\nhello hello");
-
-            cb.clear_buffer();
-
-            cb.write("cleared");
-        }
+        let header = PsfHeader::new(start);
+        crate::println!("header:  {:?}", header);
+        // let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
+        //     .get_response()
+        //     .unwrap()
+        //     .framebuffers()
+        //     .next()
+        //     .unwrap();
+        //
+        //
+        // let b_font = font::Font::from_file();
+        // unsafe {
+        //     let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 50, b_font);
+        //
+        //     cb.write("hello, world! hello hello\nhello hello");
+        //
+        //     cb.clear_buffer();
+        //
+        //     cb.write("cleared");
+        // }
     }
     loop {}
 }
@@ -128,14 +123,31 @@ pub fn init_idt() {
     IDT.load();
 }
 
+
+lazy_static! {
+    static ref CHARBUFFER: Mutex<CharBuffer<'static, 'static>> = unsafe {
+            let font = font::Font::from_file();
+            let framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
+            .get_response()
+            .unwrap()
+            .framebuffers()
+            .next()
+            .unwrap();
+
+            let m = Mutex::new(CharBuffer::new(Color::White, framebuffer, 32, 16, 50, font));
+            m
+        };
+}
+
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
 
-       // idt.page_fault.set_handler_fn(page_fault_handler);
+        // idt.page_fault.set_handler_fn(page_fault_handler);
         idt.device_not_available.set_handler_fn(breakpoint_handler);
         // idt.double_fault.set_handler_fn(double_fault_handler);
         idt
     };
 }
+

@@ -159,6 +159,7 @@ impl PsfHeader {
     }
 }
 
+// TODO robert move to different file
 pub unsafe fn draw_letter(bitmap: &Bitmap_t, framebuffer: *mut u8, x: u64, y: u64, pitch: u64) {
     let color = Color::White as u32;
     let background_color = Color::Black as u32;
@@ -199,6 +200,7 @@ pub unsafe fn draw_letter(bitmap: &Bitmap_t, framebuffer: *mut u8, x: u64, y: u6
     }
 }
 
+// TODO robert move to different file
 unsafe fn draw_pixel(framebuffer: *mut u8, x: u64, y: u64, pitch: u64, color: u32) {
     let fb_u32 = framebuffer as *mut u32; // Cast the u8 pointer to a u32 pointer
     let pixel_offset = x + y * (pitch / 4); // Assuming pitch is the number of bytes per row

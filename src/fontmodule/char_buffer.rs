@@ -24,6 +24,10 @@ pub struct CharBuffer<'a, 'b> {
     font: Font<'b>,
 }
 
+unsafe impl<'a, 'b> Sync for CharBuffer<'a, 'b> {}
+
+unsafe impl<'a, 'b> Send for CharBuffer<'a, 'b> {}
+
 impl<'a, 'b> CharBuffer<'a, 'b> {
     pub fn new(
         color: Color,
