@@ -14,7 +14,7 @@ pub enum Color {
 
 pub struct CharBuffer<'a, 'b> {
     framebuffer: Framebuffer<'a>,
-    charbuffer: [char; 3000],
+    charbuffer: [char; 300],
     chars_per_row: u32,
     // will be used to calculate line height
     character_height_px: u32,
@@ -45,7 +45,7 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
             chars_per_row,
             caret: 0,
             // empty glyph
-            charbuffer: ['\u{020}'; 3000],
+            charbuffer: ['\u{020}'; 300],
             font,
         }
     }
@@ -75,7 +75,6 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
     }
 
     unsafe fn render(&mut self) {
-        self.clear_screen();
         for (i, &char) in self.charbuffer.iter().enumerate() {
             let row_index = i as u32 / self.chars_per_row;
             let column_index = i as u32 % self.chars_per_row;
@@ -102,6 +101,7 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
         for i in 0..self.charbuffer.iter().len() {
             let row_index = i as u32 / self.chars_per_row;
             let column_index = i as u32 % self.chars_per_row;
+            // let column_index = i as u32 - (row_index * self.chars_per_row);
 
             unsafe {
                 font::draw_letter(

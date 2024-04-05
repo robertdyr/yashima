@@ -29,7 +29,7 @@ impl ToUnicode for [u8] {
 type Bitmap_t = [u8; 64];
 
 #[derive(Debug)]
-pub struct BGlyph<'a> {
+pub struct Glyph<'a> {
     height_px: u32,
     width_px: u32,
     pub bitmap: &'a Bitmap_t,
@@ -129,8 +129,8 @@ impl<'a> Font<'a> {
         }
     }
 
-    pub fn get_glyph(&self, char: char) -> BGlyph {
-        BGlyph {
+    pub fn get_glyph(&self, char: char) -> Glyph {
+        Glyph {
             height_px: self.height_px,
             width_px: self.height_px,
             bitmap: &self.bitmap_table.map[self.unicode_table.table[char as usize] as usize],
