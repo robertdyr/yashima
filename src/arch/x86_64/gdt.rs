@@ -80,6 +80,8 @@ pub struct SegmentDescriptor {
 }
 
 impl SegmentDescriptor {
+    /// `dpl` descriptor privilige level
+    /// `c` conforming bit
     // TODO move the comments of the variable stuff into proper docs. reference the rest as:
     // as described in [`SegmentDescriptor`]
     pub fn new_cs(dpl: Ring, c: bool) -> SegmentDescriptor {
@@ -127,8 +129,13 @@ impl SegmentDescriptor {
 
     pub fn get_from_cs_r() -> SegmentDescriptor {
         // TODO load cs segment from the cs register
-        // asm!("mov {}"),
-        core::unimplemented!("not yet implemented");
+
+        // init values will be overriden so they dont matter
+        let mut cs_descr = SegmentDescriptor::new_cs(Ring::Ring0, true);
+        unsafe {
+            asm!("mov [{}], cs", in(reg) &mut cs_descr as *mut SegmentDescriptor);
+        }
+        cs_descr
     }
 
     pub fn new_ds() -> SegmentDescriptor {
