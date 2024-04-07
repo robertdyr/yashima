@@ -18,7 +18,7 @@ use core::u16;
 pub struct GdtPointer {
     pub limit: u16,
     // TODO test if i can replace this with &'static mut (probably not tho)
-    pub base_adr: *const Gdt,
+    pub base_adr: *mut Gdt,
 }
 
 impl GdtPointer {
@@ -28,7 +28,7 @@ impl GdtPointer {
         // limit is ignored
         Self {
             limit: 0,
-            base_adr: core::ptr::null(),
+            base_adr: core::ptr::null_mut(),
         }
     }
     /// Writes the software visible content of the GDT-Register into `gdt_pointer`.
