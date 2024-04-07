@@ -26,7 +26,10 @@ impl GdtPointer {
     /// The 'base_adr' is a null pointer.
     pub fn dummy() -> GdtPointer {
         // limit is ignored
-        Self { limit: 0, base_adr: core::ptr::null() }
+        Self {
+            limit: 0,
+            base_adr: core::ptr::null(),
+        }
     }
     /// Writes the software visible content of the GDT-Register into `gdt_pointer`.
     ///
@@ -36,10 +39,9 @@ impl GdtPointer {
     /// requires the caller to ensure that the `gdt_pointer` is valid and can safely
     /// be written to.
     pub unsafe fn get_from_gdt_r(gdt_pointer: &mut GdtPointer) {
-        asm!("sgdt ({0})", in(reg) gdt_pointer as *mut GdtPointer, options(att_syntax));
+        asm!("sgdt [{0}]", in(reg) gdt_pointer as *mut GdtPointer);
     }
 }
-
 
 /// The Global Descriptor Table (Gdt) stores the CS, DS, ES, GS, FS, SS Segment Descriptors ([`SegmentDescriptor`])
 /// In long mode most of the segmentation and its features is disabled/ignored. That's why we only store the null-selector required by the
@@ -124,7 +126,7 @@ impl SegmentDescriptor {
 
     pub fn get_from_cs_r() -> SegmentDescriptor {
         // TODO load cs segment from the cs register
-        
+        // asm!("mov {}"),
         core::unimplemented!("not yet implemented");
     }
 
@@ -139,7 +141,6 @@ impl SegmentDescriptor {
         // P = 0, a segment-not-present exception (#NP) occurs. This bit is set and cleared by system software
         // and is never altered by the processor.
         upper = upper | 1 << 15;
-
 
         // all other fields are ignored in 64 bit long mode
         Self { lower, upper }
