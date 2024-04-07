@@ -51,6 +51,7 @@ impl GdtPointer {
 ///
 // TODO add source and make sure we really onlly need a singular data segement for all the data segments
 // TODO should be aligned on an 8 byte boundary
+// TODO fix this description as its no longer true with limine bootloader
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 #[allow(unused)]
