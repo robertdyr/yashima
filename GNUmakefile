@@ -1,11 +1,9 @@
 # Nuke built-in rules and variables.
 override MAKEFLAGS += -rR
 
-# override IMAGE_NAME := yashima
-
-
-# override TARGET := x86_64-yashima
 override IMAGE_NAME := yashima
+
+# override TARGET := x86_64-yashima 
 
 # Convenience macro to reliably declare user overridable variables.
 define DEFAULT_VAR =
@@ -47,7 +45,6 @@ $(IMAGE_NAME).iso: yashima limine
 			--efi-boot boot/limine/limine-uefi-cd.bin \
 			-efi-boot-part --efi-boot-image --protective-msdos-label \
 			iso_root -o out/$(IMAGE_NAME).iso
-
 	# Install Limine stage 1 and 2 for legacy BIOS boot.
 	./limine/limine bios-install out/$(IMAGE_NAME).iso
 
