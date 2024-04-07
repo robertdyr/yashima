@@ -2,14 +2,13 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
-
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
-use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
 use limine::request::StackSizeRequest;
+use limine::BaseRevision;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
@@ -17,12 +16,12 @@ use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
-use crate::fontmodule::font::{_binary_Uni3_TerminusBold32x16_psf_start, PsfHeader};
+use crate::fontmodule::font::{PsfHeader, _binary_Uni3_TerminusBold32x16_psf_start};
 
 // extern crate rlibc;
 
-mod fontmodule;
 mod arch;
+mod fontmodule;
 
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
@@ -74,30 +73,13 @@ pub extern "C" fn main() -> ! {
         let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
         let header = PsfHeader::new(start);
         crate::println!("header:  {:?}", header);
-        // let mut framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
-        //     .get_response()
-        //     .unwrap()
-        //     .framebuffers()
-        //     .next()
-        //     .unwrap();
-        //
-        //
-        // let b_font = font::Font::from_file();
-        // unsafe {
-        //     let mut cb = CharBuffer::new(Color::White, framebuffer, 32, 16, 50, b_font);
-        //
-        //     cb.write("hello, world! hello hello\nhello hello");
-        //
-        //     cb.clear_buffer();
-        //
-        //     cb.write("cleared");
-        // }
     }
     loop {}
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    println!("{:?}", info);
     loop {}
 }
 
@@ -123,20 +105,19 @@ pub fn init_idt() {
     IDT.load();
 }
 
-
 lazy_static! {
     static ref CHARBUFFER: Mutex<CharBuffer<'static, 'static>> = unsafe {
-            let font = font::Font::from_file();
-            let framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
+        let font = font::Font::from_file();
+        let framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
             .get_response()
             .unwrap()
             .framebuffers()
             .next()
             .unwrap();
 
-            let m = Mutex::new(CharBuffer::new(Color::White, framebuffer, 32, 16, 50, font));
-            m
-        };
+        let m = Mutex::new(CharBuffer::new(Color::White, framebuffer, 32, 16, 50, font));
+        m
+    };
 }
 
 lazy_static! {
@@ -150,4 +131,3 @@ lazy_static! {
         idt
     };
 }
-
