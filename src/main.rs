@@ -7,15 +7,17 @@ use core::panic::PanicInfo;
 use lazy_static::lazy_static;
 use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
-use limine::request::FramebufferRequest;
+use limine::paging::Mode;
+use limine::request::{FramebufferRequest, PagingModeRequest};
 use limine::request::StackSizeRequest;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
-use arch::x86_64::cpuid::CpuId;
 use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
+
+use crate::arch::x86_64::control::Cr4;
 
 // extern crate rlibc;
 
@@ -24,7 +26,7 @@ mod fontmodule;
 
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
-// static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FOUR_LEVEL);
+static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FOUR_LEVEL);
 
 // Some reasonable size
 pub const STACK_SIZE: u64 = 0x1000000;
@@ -63,19 +65,22 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     unsafe {
-        // core::ptr::read_volatile(PAGE_MODE_REQUEST.get_response().unwrap());
+        core::ptr::read_volatile(PAGE_MODE_REQUEST.get_response().unwrap());
+        core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
-    // let cr4 = Cr4::new();
-    // println!("{:b}", cr4.0);
-
     init_idt();
+    let test = Cr4::new();
+    println!("{:064b}", test.0);
+    loop {}
+    let cr4 = Cr4::new();
+    println!("{:b}", cr4.0);
+
     // x86_64::instructions::interrupts::int3(); // new
 
-    unsafe {
-        core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
-        let cpuid = CpuId::get_cpuid(0x0);
-        println!("cpuid {:?}", cpuid);
-    }
+    // unsafe {
+    //     let cpuid = CpuId::get_cpuid(0x0);
+    //     println!("cpuid {:?}", cpuid);
+    // }
 
     // unsafe {
     //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
