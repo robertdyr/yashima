@@ -5,10 +5,10 @@
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
+use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::request::FramebufferRequest;
 use limine::request::StackSizeRequest;
-use limine::BaseRevision;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
@@ -16,7 +16,7 @@ use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
-use crate::fontmodule::font::{PsfHeader, _binary_Uni3_TerminusBold32x16_psf_start};
+use crate::arch::x86_64::cpuid::CpuId;
 
 // extern crate rlibc;
 
@@ -67,13 +67,15 @@ pub extern "C" fn main() -> ! {
 
     unsafe {
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
+        let cpuid = CpuId::get_cpuid(0x0);
+        println!("cpuid {:?}", cpuid);
     }
 
-    unsafe {
-        let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-        let header = PsfHeader::new(start);
-        crate::println!("header:  {:?}", header);
-    }
+    // unsafe {
+    //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
+    //     let header = PsfHeader::new(start);
+    //     crate::println!("header:  {:?}", header);
+    // }
     loop {}
 }
 
