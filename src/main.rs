@@ -29,7 +29,7 @@ static BASE_REVISION: BaseRevision = BaseRevision::new();
 #[used]
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 #[used]
-static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FIVE_LEVEL);
+static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FOUR_LEVEL);
 
 // Some reasonable size
 pub const STACK_SIZE: u64 = 0x1000000;
