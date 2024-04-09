@@ -18,6 +18,7 @@ use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
 use crate::arch::x86_64::control::{Cr0, Cr4};
+use crate::arch::x86_64::cpuid::CpuId;
 
 // extern crate rlibc;
 
@@ -25,8 +26,10 @@ mod arch;
 mod fontmodule;
 
 static BASE_REVISION: BaseRevision = BaseRevision::new();
+#[used]
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
-static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FOUR_LEVEL);
+#[used]
+static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FIVE_LEVEL);
 
 // Some reasonable size
 pub const STACK_SIZE: u64 = 0x1000000;
@@ -65,14 +68,27 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     unsafe {
-        core::ptr::read_volatile(PAGE_MODE_REQUEST.get_response().unwrap());
+        let mode = PAGE_MODE_REQUEST.get_response().unwrap();
+        if mode.mode() == limine::paging::Mode::FOUR_LEVEL {
+            println!("four level");
+        } else {
+            println!("five level");
+        }
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
+    let info = CpuId::get_cpuid_eax(0x80000001);
+    let edx = info.edx;
+    println!("supports {:064b}", edx);
+    // let info = CpuId::get_cpuid_eax_ecx(0x7, 0x0);
+    // let ecx = info.ecx;
+    // println!("supports {:064b}", ecx);
     init_idt();
     let cr4 = Cr4::new();
     println!("cr4: {:064b}", cr4.0);
     let cr0 = Cr0::new();
     println!("cr0: {:064b}", cr0.0);
+    // let cr4 = Cr4::new();
+    // println!("cr4: {:064b}", cr4.0);
     loop {}
     let cr4 = Cr4::new();
     println!("{:b}", cr4.0);
