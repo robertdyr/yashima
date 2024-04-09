@@ -17,7 +17,7 @@ use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
-use crate::arch::x86_64::control::Cr4;
+use crate::arch::x86_64::control::{Cr0, Cr4};
 
 // extern crate rlibc;
 
@@ -69,8 +69,10 @@ pub extern "C" fn main() -> ! {
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
     init_idt();
-    let test = Cr4::new();
-    println!("{:064b}", test.0);
+    let cr4 = Cr4::new();
+    println!("cr4: {:064b}", cr4.0);
+    let cr0 = Cr0::new();
+    println!("cr0: {:064b}", cr0.0);
     loop {}
     let cr4 = Cr4::new();
     println!("{:b}", cr4.0);
