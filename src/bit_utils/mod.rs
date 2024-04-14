@@ -12,7 +12,8 @@ impl BitRange for u64 {
     }
 
     fn bit_range(&self, range: Range<usize>) -> u64 {
-        let h = self << range.end >> range.end;
+        let s = 64;
+        let h = self << s - range.end >> s - range.end;
         h >> range.start
     }
 }
