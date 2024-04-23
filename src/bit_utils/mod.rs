@@ -18,3 +18,9 @@ impl BitRange for u64 {
     }
 }
 
+#[macro_export]
+macro_rules! bit {
+    ($x:expr) => {
+        1 << $x
+    };
+}

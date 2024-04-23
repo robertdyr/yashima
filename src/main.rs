@@ -17,13 +17,14 @@ use fontmodule::char_buffer::CharBuffer;
 use fontmodule::char_buffer::Color;
 use fontmodule::font;
 
-use crate::arch::x86_64::control::{Cr0, Cr4};
+use crate::arch::x86_64::control::{Cr3, Cr4};
 use crate::arch::x86_64::cpuid::CpuId;
 
 // extern crate rlibc;
 
 mod arch;
 mod fontmodule;
+mod bit_utils;
 
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 #[used]
@@ -76,17 +77,17 @@ pub extern "C" fn main() -> ! {
         }
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
-    let info = CpuId::get_cpuid_eax(0x80000001);
-    let edx = info.edx;
-    println!("supports {:064b}", edx);
+    let info = CpuId::get_cpuid_eax(0x7);
+    let ecx = info.ecx;
+    println!("supports {:064b}", ecx);
     // let info = CpuId::get_cpuid_eax_ecx(0x7, 0x0);
     // let ecx = info.ecx;
     // println!("supports {:064b}", ecx);
     init_idt();
     let cr4 = Cr4::new();
     println!("cr4: {:064b}", cr4.0);
-    let cr0 = Cr0::new();
-    println!("cr0: {:064b}", cr0.0);
+    let cr3 = Cr3::new();
+    println!("cr3: {:064b}", cr3.0);
     // let cr4 = Cr4::new();
     // println!("cr4: {:064b}", cr4.0);
     loop {}
