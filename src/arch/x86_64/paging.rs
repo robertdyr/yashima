@@ -12,9 +12,22 @@ pub struct PageTable {
     entries: [PML4Entry; NUM_PML4_ENTRIES],
 }
 
+pub struct PhysAddr(pub u64);
+
+impl PhysAddr {
+    pub fn new(addr: u64) -> Self {
+        Self(addr)
+    }
+}
 
 /// PML4 Entry
 pub struct PML4Entry(u64);
+
+impl PML4Entry {
+    pub fn new(phys_addr: PhysAddr, flags: PML4Flags) -> Self {
+        PML4Entry(phys_addr.0 | flags.bits())
+    }
+}
 
 bitflags! {
     pub struct PML4Flags: u64 {
