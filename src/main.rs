@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::paging::Mode;
-use limine::request::{FramebufferRequest, PagingModeRequest};
+use limine::request::{FramebufferRequest, HhdmRequest, PagingModeRequest};
 use limine::request::StackSizeRequest;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
@@ -31,6 +31,9 @@ static BASE_REVISION: BaseRevision = BaseRevision::new();
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 #[used]
 static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode(Mode::FOUR_LEVEL);
+
+#[used]
+static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 // Some reasonable size
 pub const STACK_SIZE: u64 = 0x1000000;
@@ -66,28 +69,52 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
     }
 }
 
+use crate::arch::x86_64::paging::PML4Table;
+
+unsafe fn read_pml4table(hhdm_offset: usize, table_phys_addr: usize) -> &'static PML4Table {
+    let ptr = hhdm_offset as *const u8;
+    let virt_table_addr = unsafe { ptr.offset((table_phys_addr << 12) as isize) } as *const PML4Table;
+    let adr = virt_table_addr as usize;
+    println!("virt adr: {adr:x}");
+    let virt_table_own = &*virt_table_addr;
+    virt_table_own
+}
+
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     unsafe {
         let mode = PAGE_MODE_REQUEST.get_response().unwrap();
+        let hhdm_offset = HHDM_REQUEST.get_response().unwrap().offset();
+        println!("hhdm offset is {hhdm_offset:x}");
+        let cr3 = Cr3::read_from();
+        let phys_base_adr = cr3.get_base_addr();
+        println!("phys_base_adr {phys_base_adr:x}");
+        let pml4table = read_pml4table(hhdm_offset as usize, phys_base_adr as usize);
+        for entry in pml4table.entries {
+            let e = entry.0;
+            if e != 0 {
+                println!("entry {e:064b}");
+            }
+        }
+
         if mode.mode() == limine::paging::Mode::FOUR_LEVEL {
-            println!("four level");
+            // println!("four level");
         } else {
-            println!("five level");
+            // println!("five level");
         }
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
     let info = CpuId::get_cpuid_eax(0x7);
     let ecx = info.ecx;
-    println!("supports {:064b}", ecx);
+    // println!("supports {:064b}", ecx);
     // let info = CpuId::get_cpuid_eax_ecx(0x7, 0x0);
     // let ecx = info.ecx;
     // println!("supports {:064b}", ecx);
     init_idt();
     let cr4 = Cr4::new();
-    println!("cr4: {:064b}", cr4.0);
-    let cr3 = Cr3::new();
-    println!("cr3: {:064b}", cr3.0);
+    //println!("cr4: {:064b}", cr4.0);
+    let cr3 = Cr3::read_from();
+    //println!("cr3: {:064b}", cr3.0);
     // let cr4 = Cr4::new();
     // println!("cr4: {:064b}", cr4.0);
     loop {}

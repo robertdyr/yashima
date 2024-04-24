@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-trait BitRange {
+pub(crate) trait BitRange {
     fn bit(&self, i: usize) -> bool;
     fn bit_range(&self, range: Range<usize>) -> Self;
 }

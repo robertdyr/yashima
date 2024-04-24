@@ -34,6 +34,8 @@ impl Cr2 {
     }
 }
 
+use crate::bit_utils::BitRange;
+
 /// Raw contents of Cr3 register.
 ///
 /// For further information refer to [3.1.2 Cr2 and Cr3 Registers](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=105) in the AMD Manual Volume 2.
@@ -42,12 +44,17 @@ pub struct Cr3(pub u64);
 impl Cr3 {
     // TODO remove this later for functions that directly query the bits.
     // its no use storing this in main memory since it resides in the registers anyways which is faster
-    pub fn new() -> Self {
+    pub fn read_from() -> Self {
         let content: u64;
         unsafe {
             asm!("mov {}, cr3", out(reg) content);
         }
         Self(content)
+    }
+
+    /// Returns the addresse of the PMl4 Table. The addrese omits the last 12 bits since it is 4Kb aligned.
+    pub fn get_base_addr(&self) -> u64 {
+        self.0.bit_range(12..51)
     }
 }
 
