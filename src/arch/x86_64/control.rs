@@ -1,4 +1,5 @@
 use core::arch::asm;
+use crate::bit_utils::BitRange;
 
 /// Raw contents of Cr0 register.
 ///
@@ -34,7 +35,6 @@ impl Cr2 {
     }
 }
 
-use crate::bit_utils::BitRange;
 
 /// Raw contents of Cr3 register.
 ///
