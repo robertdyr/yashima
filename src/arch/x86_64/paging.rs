@@ -1,6 +1,15 @@
 use bitflags::bitflags;
 
 use crate::bit;
+use crate::bit_utils::BitRange;
+
+pub struct PhysAddr(pub u64);
+
+impl PhysAddr {
+    pub fn new(addr: u64) -> Self {
+        Self(addr)
+    }
+}
 
 const NUM_PML4_ENTRIES: usize = 512;
 
@@ -13,13 +22,6 @@ pub struct PML4Table {
     pub entries: [PML4Entry; NUM_PML4_ENTRIES],
 }
 
-pub struct PhysAddr(pub u64);
-
-impl PhysAddr {
-    pub fn new(addr: u64) -> Self {
-        Self(addr)
-    }
-}
 
 /// PML4 Entry
 #[derive(Debug, Clone, Copy)]
@@ -27,7 +29,15 @@ pub struct PML4Entry(pub u64);
 
 impl PML4Entry {
     pub fn new(phys_addr: PhysAddr, flags: PML4Flags) -> Self {
-        PML4Entry((phys_addr.0 << 12)  | flags.bits())
+        PML4Entry((phys_addr.0 << 12) | flags.bits())
+    }
+
+    pub fn get_flags(&self) -> Option<PML4Flags> {
+        PML4Flags::from_bits(self.0)
+    }
+
+    pub fn get_phys_addr(&self) -> PhysAddr {
+        PhysAddr(self.0.bit_range(12..51))
     }
 }
 
@@ -76,6 +86,16 @@ bitflags! {
     }
 }
 
+const NUM_PDPE_ENTRIES: usize = 512;
+
+/// Page Table Structure for all hierarchy levels.
+///
+/// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
+/// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
+#[repr(transparent)]
+pub struct PDPETable {
+    pub entries: [PDPEntry; NUM_PDPE_ENTRIES],
+}
 
 /// PML3 Entry
 #[derive(Debug, Clone, Copy)]
@@ -84,6 +104,14 @@ pub struct PDPEntry(u64);
 impl PDPEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDPFlags) -> Self {
         PDPEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
+    }
+
+    pub fn get_flags(&self) -> Option<PDPFlags> {
+        PDPFlags::from_bits(self.0)
+    }
+
+    pub fn get_phys_addr(&self) -> PhysAddr {
+        PhysAddr(self.0.bit_range(12..51))
     }
 }
 
@@ -133,13 +161,32 @@ bitflags! {
 }
 
 
+const NUM_PDE_ENTRIES: usize = 512;
+
+/// Page Table Structure for all hierarchy levels.
+///
+/// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
+/// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
+#[repr(transparent)]
+pub struct PDETable {
+    pub entries: [PDEntry; NUM_PDE_ENTRIES],
+}
+
 
 /// PML2 Entry
 #[derive(Debug, Clone, Copy)]
 pub struct PDEntry(u64);
+
 impl PDEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDFlags) -> Self {
         PDEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
+    }
+    pub fn get_flags(&self) -> Option<PDFlags> {
+        PDFlags::from_bits(self.0)
+    }
+
+    pub fn get_phys_addr(&self) -> PhysAddr {
+        PhysAddr(self.0.bit_range(12..51))
     }
 }
 
@@ -191,6 +238,18 @@ bitflags! {
 
 
 
+const NUM_PTE_ENTRIES: usize = 512;
+
+/// Page Table Structure for all hierarchy levels.
+///
+/// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
+/// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
+#[repr(transparent)]
+pub struct PTETable {
+    pub entries: [PTEntry; NUM_PTE_ENTRIES],
+}
+
+
 /// PML1 Entry
 #[derive(Debug, Clone, Copy)]
 pub struct PTEntry(u64);
@@ -199,7 +258,13 @@ impl PTEntry {
     pub fn new(phys_addr: PhysAddr, flags: PTFlags) -> Self {
         PTEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
     }
+    pub fn get_flags(&self) -> Option<PTFlags> {
+        PTFlags::from_bits(self.0)
+    }
 
+    pub fn get_phys_addr(&self) -> PhysAddr {
+        PhysAddr(self.0.bit_range(12..51))
+    }
 }
 
 
