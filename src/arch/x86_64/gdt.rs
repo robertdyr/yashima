@@ -14,7 +14,7 @@ use core::u16;
 /// Volume 2: System Programming (PDF), specifically at:
 /// [AMD64 Architecture Programmer's Manual, Volume 2, Page 145](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/24593.pdf#page=145).
 #[derive(Clone, Copy, Debug)]
-#[repr(C, packed)]
+#[repr(C, packed(10))]
 pub struct GdtPointer {
     pub limit: u16,
     // TODO test if i can replace this with &'static mut (probably not tho)

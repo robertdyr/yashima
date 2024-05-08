@@ -1,7 +1,7 @@
 use core::arch::asm;
 
 #[derive(Debug)]
-#[repr(C, packed)]
+#[repr(C)]
 pub struct CpuId {
     pub eax: u64,
     pub ebx: u64,

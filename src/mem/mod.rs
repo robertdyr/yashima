@@ -13,8 +13,7 @@ use crate::bit_utils::BitRange;
 /// NOTES: * IfCPUID.80000008H:EAX[7:0]issupported,themaximumphysicaladdressnumbersupportedshould come from this field. If TME-MK is enabled, the number of bits that can be used to address physical memory is CPUID.80000008H:EAX[7:0] - IA32_TME_ACTIVATE[35:32].
 pub fn get_addr_sizes() -> (u64, u64)  {
     let cpuid = crate::arch::x86_64::cpuid::CpuId::get_cpuid_eax(0x80000008);
-    let eax = cpuid.eax;
-    let phys_range = eax.bit_range(0..7);
-    let virt_range = eax.bit_range(8..15);
+    let phys_range = cpuid.eax.bit_range(0..7);
+    let virt_range = cpuid.eax.bit_range(8..15);
     (phys_range, virt_range)
 }
