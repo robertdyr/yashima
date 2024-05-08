@@ -4,6 +4,7 @@ use crate::bit_utils::BitRange;
 /// Raw contents of Cr0 register.
 ///
 /// For further information refer to [3.1.1 Cr0 Register](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=102) in the AMD Manual Volume 2.
+#[repr(transparent)]
 pub struct Cr0(pub u64);
 
 impl Cr0 {
@@ -21,6 +22,8 @@ impl Cr0 {
 /// Raw contents of Cr2 register.
 ///
 /// For further information refer to [3.1.2 Cr2 and Cr3 Registers](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=105) in the AMD Manual Volume 2.
+#[repr(transparent)]
+
 pub struct Cr2(pub u64);
 
 impl Cr2 {
@@ -39,6 +42,8 @@ impl Cr2 {
 /// Raw contents of Cr3 register.
 ///
 /// For further information refer to [3.1.2 Cr2 and Cr3 Registers](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=105) in the AMD Manual Volume 2.
+#[repr(transparent)]
+
 pub struct Cr3(pub u64);
 
 impl Cr3 {
@@ -61,6 +66,8 @@ impl Cr3 {
 /// Raw contents of Cr4 register.
 ///
 /// For further information refer to [3.1.3 Cr4 Register](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=107) in the AMD Manual Volume 2.
+#[repr(transparent)]
+
 pub struct Cr4(pub u64);
 
 impl Cr4 {
