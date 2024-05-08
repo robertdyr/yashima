@@ -7,8 +7,9 @@ use core::panic::PanicInfo;
 use lazy_static::lazy_static;
 use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
+use limine::memory_map::EntryType;
 use limine::paging::Mode;
-use limine::request::{FramebufferRequest, HhdmRequest, PagingModeRequest};
+use limine::request::{FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest};
 use limine::request::StackSizeRequest;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
@@ -25,7 +26,9 @@ use crate::arch::x86_64::cpuid::CpuId;
 mod arch;
 mod fontmodule;
 mod bit_utils;
+mod mem;
 
+#[used]
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 #[used]
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
@@ -36,9 +39,14 @@ static PAGE_MODE_REQUEST: PagingModeRequest = PagingModeRequest::new().with_mode
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 // Some reasonable size
+
 pub const STACK_SIZE: u64 = 0x1000000;
 // Request a larger stack
+#[used]
 pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(STACK_SIZE);
+
+#[used]
+pub static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 
 #[no_mangle]
 pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
@@ -83,17 +91,36 @@ unsafe fn read_pml4table(hhdm_offset: usize, table_phys_addr: usize) -> &'static
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     unsafe {
+        core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
+        let mmap = MEMORY_MAP_REQUEST.get_response().unwrap();
+        let (phys_range, virt_range) = mem::get_addr_sizes();
+
+        println!("phys_range {phys_range}");
+        println!("virt_range {virt_range}");
+        for (i,el) in mmap.entries().iter().enumerate() {
+            let is_usable = el.entry_type.eq(&EntryType::USABLE);
+            let is_kernel = el.entry_type.eq(&EntryType::KERNEL_AND_MODULES);
+
+            if is_usable {
+                //println!("{i} b: {:x?}  l: {:x}", el.base, el.length);
+            }
+
+            if is_kernel {
+                //println!("{i} b: {:x?}  l: {:x}", el.base, el.length);
+            }
+
+        }
         let mode = PAGE_MODE_REQUEST.get_response().unwrap();
         let hhdm_offset = HHDM_REQUEST.get_response().unwrap().offset();
-        println!("hhdm offset is {hhdm_offset:x}");
+        //println!("hhdm offset is {hhdm_offset:x}");
         let cr3 = Cr3::read_from();
         let phys_base_adr = cr3.get_base_addr();
-        println!("phys_base_adr {phys_base_adr:x}");
+        //println!("phys_base_adr {phys_base_adr:x}");
         let pml4table = read_pml4table(hhdm_offset as usize, phys_base_adr as usize);
         for entry in pml4table.entries {
             let e = entry.0;
             if e != 0 {
-                println!("entry {e:064b}");
+                //println!("entry {e:064b}");
             }
         }
 
@@ -102,7 +129,6 @@ pub extern "C" fn main() -> ! {
         } else {
             // println!("five level");
         }
-        core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
     }
     let info = CpuId::get_cpuid_eax(0x7);
     let ecx = info.ecx;

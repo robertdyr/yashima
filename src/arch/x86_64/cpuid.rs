@@ -3,8 +3,8 @@ use core::arch::asm;
 #[derive(Debug)]
 #[repr(C, packed)]
 pub struct CpuId {
-    eax: u64,
-    ebx: u64,
+    pub eax: u64,
+    pub ebx: u64,
     pub ecx: u64,
     pub edx: u64,
 }
