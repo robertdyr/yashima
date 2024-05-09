@@ -93,7 +93,7 @@ pub extern "C" fn main() -> ! {
     unsafe {
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
         let mmap = MEMORY_MAP_REQUEST.get_response().unwrap();
-        let (phys_range, virt_range) = mem::get_addr_sizes();
+        let (phys_range, virt_range) = arch::x86_64::cpuid::get_addr_sizes();
 
         println!("phys_range {phys_range}");
         println!("virt_range {virt_range}");
