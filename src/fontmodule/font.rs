@@ -42,9 +42,9 @@ pub struct BitmapTable<'a> {
 
 impl<'a> BitmapTable<'a> {
     /// ```start``` is the start where the glyph bitmaps in the psf file are stored (psf file start + header size)
-    pub unsafe fn new(start: usize) -> Self {
+    pub unsafe fn new(start: usize, num_glyphs: usize) -> Self {
         Self {
-            map: core::slice::from_raw_parts(start as *const Bitmap_t, 512),
+            map: core::slice::from_raw_parts(start as *const Bitmap_t, num_glyphs),
         }
     }
 }
@@ -103,7 +103,7 @@ impl<'a> Font<'a> {
         let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
 
         let psf_header = PsfHeader::new(start);
-        let bitmap_table = BitmapTable::new(start + psf_header.headersize as usize);
+        let bitmap_table = BitmapTable::new(start + psf_header.headersize as usize, psf_header.numglpyh as usize);
         let unicode_table_start =
             start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
         let unicode_table = UnicodeTable::new(unicode_table_start, end - unicode_table_start);
