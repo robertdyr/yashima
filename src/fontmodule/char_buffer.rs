@@ -14,13 +14,14 @@ pub enum Color {
 
 pub struct CharBuffer<'a, 'b> {
     framebuffer: Framebuffer<'a>,
-    charbuffer: [char; 300],
+    charbuffer: [char; 3000],
     chars_per_row: u32,
     // will be used to calculate line height
     character_height_px: u32,
     character_width_px: u32,
     color: Color,
     caret: u32,
+    prev_caret: u32,
     font: Font<'b>,
 }
 
@@ -44,12 +45,15 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
             character_width_px,
             chars_per_row,
             caret: 0,
+            prev_caret: 0,
             // empty glyph
-            charbuffer: ['\u{020}'; 300],
+            charbuffer: ['\u{020}'; 3000],
             font,
         }
     }
+
     pub fn write(&mut self, str: &str) {
+        self.prev_caret = self.caret;
         for char in str.chars() {
             match char {
                 '\n' => self.new_line(),
@@ -76,18 +80,20 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
 
     unsafe fn render(&mut self) {
         for (i, &char) in self.charbuffer.iter().enumerate() {
-            let row_index = i as u32 / self.chars_per_row;
-            let column_index = i as u32 % self.chars_per_row;
+            if i >= self.prev_caret as usize && i < self.caret as usize {
+                let row_index = i as u32 / self.chars_per_row;
+                let column_index = i as u32 % self.chars_per_row;
 
-            let g = self.font.get_glyph(char);
+                let g = self.font.get_glyph(char);
 
-            font::draw_letter(
-                g.bitmap,
-                self.framebuffer.addr(),
-                (column_index * self.character_width_px) as u64,
-                (row_index * self.character_height_px) as u64,
-                self.framebuffer.pitch(),
-            );
+                font::draw_letter(
+                    g.bitmap,
+                    self.framebuffer.addr(),
+                    (column_index * self.character_width_px) as u64,
+                    (row_index * self.character_height_px) as u64,
+                    self.framebuffer.pitch(),
+                );
+            }
         }
     }
 
@@ -115,7 +121,6 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
         }
     }
 }
-
 
 impl<'a, 'b> fmt::Write for CharBuffer<'a, 'b> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
