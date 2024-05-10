@@ -16,12 +16,11 @@ const NUM_PML4_ENTRIES: usize = 512;
 /// Page Table Structure for all hierarchy levels.
 ///
 /// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
-/// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215) 
+/// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
 #[repr(transparent)]
 pub struct PML4Table {
     pub entries: [PML4Entry; NUM_PML4_ENTRIES],
 }
-
 
 /// PML4 Entry
 #[derive(Debug, Clone, Copy)]
@@ -33,11 +32,16 @@ impl PML4Entry {
     }
 
     pub fn get_flags(&self) -> Option<PML4Flags> {
-        PML4Flags::from_bits(self.0)
+        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        PML4Flags::from_bits(flags)
     }
 
+    /// Physical Address of the Paging Structure referenced by this Entry
+    ///
+    /// The Page Walk itself is done outside this Table since it depends on how paging is
+    /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51))
+        PhysAddr(self.0.bit_range(12..51) << 12)
     }
 }
 
@@ -107,11 +111,16 @@ impl PDPEntry {
     }
 
     pub fn get_flags(&self) -> Option<PDPFlags> {
-        PDPFlags::from_bits(self.0)
+        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        PDPFlags::from_bits(flags)
     }
 
+    /// Physical Address of the Paging Structure referenced by this Entry
+    ///
+    /// The Page Walk itself is done outside this Table since it depends on how paging is
+    /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51))
+        PhysAddr(self.0.bit_range(12..51) << 12)
     }
 }
 
@@ -160,7 +169,6 @@ bitflags! {
     }
 }
 
-
 const NUM_PDE_ENTRIES: usize = 512;
 
 /// Page Table Structure for all hierarchy levels.
@@ -172,7 +180,6 @@ pub struct PDETable {
     pub entries: [PDEntry; NUM_PDE_ENTRIES],
 }
 
-
 /// PML2 Entry
 #[derive(Debug, Clone, Copy)]
 pub struct PDEntry(u64);
@@ -181,15 +188,18 @@ impl PDEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDFlags) -> Self {
         PDEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
     }
+
     pub fn get_flags(&self) -> Option<PDFlags> {
-        PDFlags::from_bits(self.0)
+        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+
+        PDFlags::from_bits(flags)
     }
 
+    /// Physical Address of the Paging Structure referenced by this Entry
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51))
+        PhysAddr(self.0.bit_range(12..51) << 12)
     }
 }
-
 
 bitflags! {
     pub struct PDFlags: u64 {
@@ -236,8 +246,6 @@ bitflags! {
     }
 }
 
-
-
 const NUM_PTE_ENTRIES: usize = 512;
 
 /// Page Table Structure for all hierarchy levels.
@@ -249,7 +257,6 @@ pub struct PTETable {
     pub entries: [PTEntry; NUM_PTE_ENTRIES],
 }
 
-
 /// PML1 Entry
 #[derive(Debug, Clone, Copy)]
 pub struct PTEntry(u64);
@@ -258,15 +265,21 @@ impl PTEntry {
     pub fn new(phys_addr: PhysAddr, flags: PTFlags) -> Self {
         PTEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
     }
+
     pub fn get_flags(&self) -> Option<PTFlags> {
-        PTFlags::from_bits(self.0)
+        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+
+        PTFlags::from_bits(flags)
     }
 
+    /// Physical Address of the Paging Structure referenced by this Entry
+    ///
+    /// The Page Walk itself is done outside this Table since it depends on how paging is
+    /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51))
+        PhysAddr(self.0.bit_range(12..51) << 12)
     }
 }
-
 
 bitflags! {
     pub struct PTFlags: u64 {
@@ -331,4 +344,3 @@ bitflags! {
         const NX = bit!(63);
     }
 }
-
