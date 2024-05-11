@@ -74,6 +74,9 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
     }
 
     fn add_character(&mut self, char: char) {
+        if self.caret as usize > self.charbuffer.len() {
+            return;
+        }
         self.charbuffer[self.caret as usize] = char;
         self.caret = self.caret + 1;
     }
