@@ -3,6 +3,9 @@ use bitflags::bitflags;
 use crate::bit_utils::BitRange;
 use crate::{bit, print};
 
+const KB4: usize = 0xFFF;
+const PAGE_MASK_4KB: u64 = (usize::MAX & !KB4) as u64;
+
 pub struct PhysAddr(pub u64);
 
 impl PhysAddr {
@@ -37,7 +40,7 @@ pub struct PML4Entry(pub u64);
 
 impl PML4Entry {
     pub fn new(phys_addr: PhysAddr, flags: PML4Flags) -> Self {
-        PML4Entry((phys_addr.0 << 12) | flags.bits())
+        PML4Entry((phys_addr.0 & PAGE_MASK_4KB) | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PML4Flags> {
@@ -121,7 +124,7 @@ pub struct PDPEntry(pub u64);
 
 impl PDPEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDPFlags) -> Self {
-        PDPEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
+        PDPEntry((phys_addr.0 & PAGE_MASK_4KB) | 0 << 7 | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PDPFlags> {
@@ -205,7 +208,7 @@ pub struct PDEntry(pub u64);
 
 impl PDEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDFlags) -> Self {
-        PDEntry((phys_addr.0 << 12) | flags.bits())
+        PDEntry((phys_addr.0 & PAGE_MASK_4KB) | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PDFlags> {
@@ -295,7 +298,7 @@ pub struct PTEntry(pub u64);
 
 impl PTEntry {
     pub fn new(phys_addr: PhysAddr, flags: PTFlags) -> Self {
-        PTEntry((phys_addr.0 << 12) | flags.bits())
+        PTEntry((phys_addr.0 & PAGE_MASK_4KB) | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PTFlags> {
