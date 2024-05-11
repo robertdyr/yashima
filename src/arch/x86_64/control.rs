@@ -1,5 +1,5 @@
-use core::arch::asm;
 use crate::bit_utils::BitRange;
+use core::arch::asm;
 
 /// Raw contents of Cr0 register.
 ///
@@ -9,7 +9,8 @@ pub struct Cr0(pub u64);
 
 impl Cr0 {
     // TODO remove this later for functions that directly query the bits.
-    // its no use storing this in main memory since it resides in the registers anyways which is faster
+    // its no use storing this in main memory since it resides in the registers anyways which is
+    // faster
     pub fn new() -> Self {
         let content: u64;
         unsafe {
@@ -28,7 +29,8 @@ pub struct Cr2(pub u64);
 
 impl Cr2 {
     // TODO remove this later for functions that directly query the bits.
-    // its no use storing this in main memory since it resides in the registers anyways which is faster
+    // its no use storing this in main memory since it resides in the registers anyways which is
+    // faster
     pub fn new() -> Self {
         let content: u64;
         unsafe {
@@ -37,7 +39,6 @@ impl Cr2 {
         Self(content)
     }
 }
-
 
 /// Raw contents of Cr3 register.
 ///
@@ -48,7 +49,8 @@ pub struct Cr3(pub u64);
 
 impl Cr3 {
     // TODO remove this later for functions that directly query the bits.
-    // its no use storing this in main memory since it resides in the registers anyways which is faster
+    // its no use storing this in main memory since it resides in the registers anyways which is
+    // faster
     pub fn read_from() -> Self {
         let content: u64;
         unsafe {
@@ -57,9 +59,10 @@ impl Cr3 {
         Self(content)
     }
 
-    /// Returns the addresse of the PMl4 Table. The addrese omits the last 12 bits since it is 4Kb aligned.
+    /// Returns the addresse of the PMl4 Table. The addrese omits the last 12 bits since it is 4Kb
+    /// aligned.
     pub fn get_base_addr(&self) -> u64 {
-        self.0.bit_range(12..51)
+        self.0.bit_range(12..52) << 12
     }
 }
 
@@ -72,7 +75,8 @@ pub struct Cr4(pub u64);
 
 impl Cr4 {
     // TODO remove this later for functions that directly query the bits.
-    // its no use storing this in main memory since it resides in the registers anyways which is faster
+    // its no use storing this in main memory since it resides in the registers anyways which is
+    // faster
     pub fn new() -> Self {
         let content: u64;
         unsafe {
@@ -80,6 +84,7 @@ impl Cr4 {
         }
         Self(content)
     }
+
     pub fn is_pcid(&self) -> bool {
         unimplemented!();
     }
