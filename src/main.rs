@@ -1,31 +1,36 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(allocator_api)]
+#![feature(strict_provenance)]
 
 use core::panic::PanicInfo;
+use core::slice;
 
 use lazy_static::lazy_static;
-use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::memory_map::EntryType;
 use limine::paging::Mode;
-use limine::request::{FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest};
-use limine::request::StackSizeRequest;
+use limine::request::{
+    FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest, StackSizeRequest,
+};
+use limine::BaseRevision;
 use spin::Mutex;
+use x86::bits64::paging;
+use x86::bits64::paging::{PDEntry, PDPTEntry, PML4Entry, PTEntry, PML4};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
-use fontmodule::char_buffer::CharBuffer;
-use fontmodule::char_buffer::Color;
+use fontmodule::char_buffer::{CharBuffer, Color};
 use fontmodule::font;
 
 use crate::arch::x86_64::control::{Cr3, Cr4};
 use crate::arch::x86_64::cpuid::CpuId;
 
 // extern crate rlibc;
-
+// extern crate alloc;
 mod arch;
-mod fontmodule;
 mod bit_utils;
+mod fontmodule;
 mod mem;
 
 #[used]
@@ -40,7 +45,7 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 // Some reasonable size
 
-pub const STACK_SIZE: u64 = 0x1000000;
+pub const STACK_SIZE: u64 = 0x2000000;
 // Request a larger stack
 #[used]
 pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(STACK_SIZE);
@@ -77,13 +82,17 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
     }
 }
 
-use crate::arch::x86_64::paging::PML4Table;
+use crate::arch::x86_64::paging::{
+    PDETable, PDFlags, PDPETable, PDPFlags, PML4Flags, PML4Table, PTETable, PTFlags, PhysAddr,
+};
+use crate::bit_utils::BitRange;
 
 unsafe fn read_pml4table(hhdm_offset: usize, table_phys_addr: usize) -> &'static PML4Table {
     let ptr = hhdm_offset as *const u8;
-    let virt_table_addr = unsafe { ptr.offset((table_phys_addr << 12) as isize) } as *const PML4Table;
+    let virt_table_addr =
+        unsafe { ptr.offset((table_phys_addr << 12) as isize) } as *const PML4Table;
     let adr = virt_table_addr as usize;
-    println!("virt adr: {adr:x}");
+    println!("virt adr: {adr:064b}   {adr:x}");
     let virt_table_own = &*virt_table_addr;
     virt_table_own
 }
@@ -94,72 +103,96 @@ pub extern "C" fn main() -> ! {
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
         let mmap = MEMORY_MAP_REQUEST.get_response().unwrap();
         let (phys_range, virt_range) = arch::x86_64::cpuid::get_addr_sizes();
-
-        println!("phys_range {phys_range}");
-        println!("virt_range {virt_range}");
-        for (i,el) in mmap.entries().iter().enumerate() {
-            let is_usable = el.entry_type.eq(&EntryType::USABLE);
-            let is_kernel = el.entry_type.eq(&EntryType::KERNEL_AND_MODULES);
-
-            if is_usable {
-                //println!("{i} b: {:x?}  l: {:x}", el.base, el.length);
-            }
-
-            if is_kernel {
-                //println!("{i} b: {:x?}  l: {:x}", el.base, el.length);
-            }
-
-        }
-        let mode = PAGE_MODE_REQUEST.get_response().unwrap();
+        // alloc::boxed::Box::new_in()
+        // println!("phys_range {phys_range}");
+        // println!("virt_range {virt_range}");
+        let _mode = PAGE_MODE_REQUEST.get_response().unwrap();
         let hhdm_offset = HHDM_REQUEST.get_response().unwrap().offset();
-        //println!("hhdm offset is {hhdm_offset:x}");
+
+        let c3 = x86::controlregs::cr3();
+
         let cr3 = Cr3::read_from();
+
+        let base_adr_pml4_x86 = c3.bit_range(12..52);
+
         let phys_base_adr = cr3.get_base_addr();
-        //println!("phys_base_adr {phys_base_adr:x}");
-        let pml4table = read_pml4table(hhdm_offset as usize, phys_base_adr as usize);
-        for entry in pml4table.entries {
-            let e = entry.0;
-            if e != 0 {
-                //println!("entry {e:064b}");
+        let pml4_phys_adr = PhysAddr::new(phys_base_adr);
+
+        let mut pages_count: u64 = 0;
+        let mut pt_tables_count: u64 = 0;
+        let mut pd_tables_count: u64 = 0;
+        let mut pdp_tables_count: u64 = 0;
+
+        let mut large_2mb_pages: u64 = 0;
+        let mut small_4kb_pages: u64 = 0;
+
+        let mut first_non_p_page = false;
+
+        let mut page_until_first_non_present = 0;
+
+        let pml4table = resolve_hhdm::<PML4Table>(&pml4_phys_adr, hhdm_offset);
+
+        // let o = 0xffff800100000000;
+        let o: usize = 0xffff800010000000;
+        let ptr = o as *const u8;
+        let idk = *ptr;
+        let mut phys_adr_last_mapped_page: u64 = 0;
+
+        println!(" idk {idk} ");
+        for (i, entry) in pml4table.entries.iter().enumerate() {
+            if entry.is_present() && i == 256 {
+                println!(" i: {:x} f: {:064b}", 256, entry.0);
+
+                pdp_tables_count = pdp_tables_count + 1;
+                let adr = entry.get_phys_addr();
+                let pdpe_table = resolve_hhdm::<PDPETable>(&adr, hhdm_offset);
+
+                for entry in pdpe_table.entries {
+                    if entry.is_present() {
+                        pd_tables_count = pd_tables_count + 1;
+                        let adr = entry.get_phys_addr();
+                        let pde_table = resolve_hhdm::<PDETable>(&adr, hhdm_offset);
+                        if entry.0 & 1 << 7 != 0 {
+                            panic!("should always be 0");
+                        }
+
+                        for entry in pde_table.entries {
+                            if entry.is_present() {
+                                pt_tables_count = pt_tables_count + 1;
+                                if entry.maps_large_page() {
+                                    large_2mb_pages = large_2mb_pages + 1;
+                                    println!(" x: {:x}", entry.get_phys_addr().0)
+                                } else {
+                                    small_4kb_pages = small_4kb_pages + 1;
+
+                                    let adr = entry.get_phys_addr();
+                                    let pte_table = resolve_hhdm::<PTETable>(&adr, hhdm_offset);
+                                    for entry in pte_table.entries {
+                                        if entry.is_present() {
+                                            pages_count = pages_count + 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-
-        if mode.mode() == limine::paging::Mode::FOUR_LEVEL {
-            // println!("four level");
-        } else {
-            // println!("five level");
-        }
+        println!(" total_pde_c: {pt_tables_count}");
+        println!(" 2mb_pages_c: {large_2mb_pages}");
+        println!(" 4kb_pages_c: {small_4kb_pages}");
+        // println!(" pt_tabs_c: {pt_tables_count}");
+        // println!(" pages_c: {pages_count}");
     }
-    let info = CpuId::get_cpuid_eax(0x7);
-    let ecx = info.ecx;
-    // println!("supports {:064b}", ecx);
-    // let info = CpuId::get_cpuid_eax_ecx(0x7, 0x0);
-    // let ecx = info.ecx;
-    // println!("supports {:064b}", ecx);
-    init_idt();
-    let cr4 = Cr4::new();
-    //println!("cr4: {:064b}", cr4.0);
-    let cr3 = Cr3::read_from();
-    //println!("cr3: {:064b}", cr3.0);
-    // let cr4 = Cr4::new();
-    // println!("cr4: {:064b}", cr4.0);
     loop {}
-    let cr4 = Cr4::new();
-    println!("{:b}", cr4.0);
+}
 
-    // x86_64::instructions::interrupts::int3(); // new
+unsafe fn resolve_hhdm<T>(addr: &PhysAddr, hhdm_offset: u64) -> &T {
+    let virt_ptr = addr.raw_mut::<u8>().offset(hhdm_offset as isize);
 
-    // unsafe {
-    //     let cpuid = CpuId::get_cpuid(0x0);
-    //     println!("cpuid {:?}", cpuid);
-    // }
-
-    // unsafe {
-    //     let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-    //     let header = PsfHeader::new(start);
-    //     crate::println!("header:  {:?}", header);
-    // }
-    loop {}
+    let r = virt_ptr as *mut T;
+    &(*r)
 }
 
 #[panic_handler]
@@ -171,11 +204,15 @@ fn panic(info: &PanicInfo) -> ! {
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     loop {}
 }
-
+extern "x86-interrupt" fn err_code(stack_frame: InterruptStackFrame, err_code: u64) {
+    println!("err");
+    loop {}
+}
 extern "x86-interrupt" fn page_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
 ) {
+    println!("pg");
     loop {}
 }
 
@@ -183,6 +220,7 @@ extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
 ) -> ! {
+    println!("df");
     loop {}
 }
 
@@ -209,10 +247,14 @@ lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
-
-        // idt.page_fault.set_handler_fn(page_fault_handler);
+        idt.general_protection_fault.set_handler_fn(err_code);
+        idt.page_fault.set_handler_fn(page_fault_handler);
         idt.device_not_available.set_handler_fn(breakpoint_handler);
-        // idt.double_fault.set_handler_fn(double_fault_handler);
+        idt.alignment_check.set_handler_fn(err_code);
+        idt.security_exception.set_handler_fn(err_code);
+        idt.bound_range_exceeded.set_handler_fn(breakpoint_handler);
+        idt.cp_protection_exception.set_handler_fn(err_code);
+        idt.double_fault.set_handler_fn(double_fault_handler);
         idt
     };
 }

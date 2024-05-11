@@ -1,13 +1,21 @@
 use bitflags::bitflags;
 
-use crate::bit;
 use crate::bit_utils::BitRange;
+use crate::{bit, print};
 
 pub struct PhysAddr(pub u64);
 
 impl PhysAddr {
     pub fn new(addr: u64) -> Self {
         Self(addr)
+    }
+
+    pub fn raw_mut<T>(&self) -> *mut T {
+        self.0 as *mut T
+    }
+
+    pub fn raw<T>(&self) -> *const T {
+        self.0 as *const T
     }
 }
 
@@ -24,6 +32,7 @@ pub struct PML4Table {
 
 /// PML4 Entry
 #[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
 pub struct PML4Entry(pub u64);
 
 impl PML4Entry {
@@ -32,7 +41,7 @@ impl PML4Entry {
     }
 
     pub fn get_flags(&self) -> Option<PML4Flags> {
-        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 63);
         PML4Flags::from_bits(flags)
     }
 
@@ -41,7 +50,11 @@ impl PML4Entry {
     /// The Page Walk itself is done outside this Table since it depends on how paging is
     /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51) << 12)
+        PhysAddr(self.0.bit_range(12..52) << 12)
+    }
+
+    pub fn is_present(&self) -> bool {
+        self.get_flags().unwrap().contains(PML4Flags::P)
     }
 }
 
@@ -103,7 +116,8 @@ pub struct PDPETable {
 
 /// PML3 Entry
 #[derive(Debug, Clone, Copy)]
-pub struct PDPEntry(u64);
+#[repr(transparent)]
+pub struct PDPEntry(pub u64);
 
 impl PDPEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDPFlags) -> Self {
@@ -111,7 +125,7 @@ impl PDPEntry {
     }
 
     pub fn get_flags(&self) -> Option<PDPFlags> {
-        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 63);
         PDPFlags::from_bits(flags)
     }
 
@@ -120,7 +134,11 @@ impl PDPEntry {
     /// The Page Walk itself is done outside this Table since it depends on how paging is
     /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51) << 12)
+        PhysAddr(self.0.bit_range(12..52) << 12)
+    }
+
+    pub fn is_present(&self) -> bool {
+        self.get_flags().unwrap().contains(PDPFlags::P)
     }
 }
 
@@ -182,22 +200,31 @@ pub struct PDETable {
 
 /// PML2 Entry
 #[derive(Debug, Clone, Copy)]
-pub struct PDEntry(u64);
+#[repr(transparent)]
+pub struct PDEntry(pub u64);
 
 impl PDEntry {
     pub fn new(phys_addr: PhysAddr, flags: PDFlags) -> Self {
-        PDEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
+        PDEntry((phys_addr.0 << 12) | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PDFlags> {
-        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 7) | (self.0 & 1 << 63);
 
         PDFlags::from_bits(flags)
     }
 
     /// Physical Address of the Paging Structure referenced by this Entry
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51) << 12)
+        PhysAddr(self.0.bit_range(12..52) << 12)
+    }
+
+    pub fn is_present(&self) -> bool {
+        self.get_flags().unwrap().contains(PDFlags::P)
+    }
+
+    pub fn maps_large_page(&self) -> bool {
+        self.get_flags().unwrap().contains(PDFlags::PS)
     }
 }
 
@@ -236,6 +263,10 @@ bitflags! {
         // or physical page is either read from or written to. The A bit is never cleared by the processor. Instead,
         // software must clear this bit to 0 when it needs to track the frequency of table or physical-page accesses.
         const A  = bit!(5);
+
+        // Page size
+        // If set this entry maps a 2-MByte page; otherwise, this entry references a page directory.
+        const PS = bit!(7);
         // No Execute
         // When the NX bit
         // is cleared to 0, code can be executed from the mapped physical pages. When the NX bit is set to 1,
@@ -259,15 +290,16 @@ pub struct PTETable {
 
 /// PML1 Entry
 #[derive(Debug, Clone, Copy)]
-pub struct PTEntry(u64);
+#[repr(transparent)]
+pub struct PTEntry(pub u64);
 
 impl PTEntry {
     pub fn new(phys_addr: PhysAddr, flags: PTFlags) -> Self {
-        PTEntry((phys_addr.0 << 12) | 0 << 7 | flags.bits())
+        PTEntry((phys_addr.0 << 12) | flags.bits())
     }
 
     pub fn get_flags(&self) -> Option<PTFlags> {
-        let flags = self.0.bit_range(0..12) | self.0.bit_range(63..63);
+        let flags = self.0.bit_range(0..9) | (self.0 & 1 << 63);
 
         PTFlags::from_bits(flags)
     }
@@ -277,7 +309,11 @@ impl PTEntry {
     /// The Page Walk itself is done outside this Table since it depends on how paging is
     /// implemented. A direct mapping needs to be handled different to a recursive mapping.
     pub fn get_phys_addr(&self) -> PhysAddr {
-        PhysAddr(self.0.bit_range(12..51) << 12)
+        PhysAddr(self.0.bit_range(12..52) << 12)
+    }
+
+    pub fn is_present(&self) -> bool {
+        self.get_flags().unwrap().contains(PTFlags::P)
     }
 }
 
