@@ -24,7 +24,7 @@ impl PhysAddr {
 
 const NUM_PML4_ENTRIES: usize = 512;
 
-/// Page Table Structure for all hierarchy levels.
+/// Page Table Structure for PML4
 ///
 /// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
 /// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
@@ -106,15 +106,15 @@ bitflags! {
     }
 }
 
-const NUM_PDPE_ENTRIES: usize = 512;
+const NUM_PDP_ENTRIES: usize = 512;
 
-/// Page Table Structure for all hierarchy levels.
+/// Page Table Structure for PDPTable
 ///
 /// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
 /// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
 #[repr(transparent)]
-pub struct PDPETable {
-    pub entries: [PDPEntry; NUM_PDPE_ENTRIES],
+pub struct PDPTable {
+    pub entries: [PDPEntry; NUM_PDP_ENTRIES],
 }
 
 /// PML3 Entry
@@ -190,15 +190,15 @@ bitflags! {
     }
 }
 
-const NUM_PDE_ENTRIES: usize = 512;
+const NUM_PD_ENTRIES: usize = 512;
 
-/// Page Table Structure for all hierarchy levels.
+/// Page Table Structure for PDTable
 ///
 /// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
 /// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
 #[repr(transparent)]
-pub struct PDETable {
-    pub entries: [PDEntry; NUM_PDE_ENTRIES],
+pub struct PDTable {
+    pub entries: [PDEntry; NUM_PD_ENTRIES],
 }
 
 /// PML2 Entry
@@ -266,10 +266,28 @@ bitflags! {
         // or physical page is either read from or written to. The A bit is never cleared by the processor. Instead,
         // software must clear this bit to 0 when it needs to track the frequency of table or physical-page accesses.
         const A  = bit!(5);
-
-        // Page size
-        // If set this entry maps a 2-MByte page; otherwise, this entry references a page directory.
+        // Dirty
+        // y. It
+        // indicates whether the physical page to which this entry points has been written. The D bit is set to 1 by
+        // the processor the first time there is a write to the physical page. The D bit is never cleared by the
+        // processor. Instead, software must clear this bit to 0 when it needs to track the frequency of physicalpage writes.
+        const D = bit!(6);
+        /// Page size
+        /// If set this entry maps a 2-MByte page; otherwise, this entry references a page directory.
         const PS = bit!(7);
+        // Global Page
+        // This bit is only present in the lowest level of the page-translation
+        // hierarchy. It indicates the physical page is a global page. The TLB entry for a global page (G=1) is not
+        // invalidated when CR3 is loaded either explicitly by a MOV CRn instruction or implicitly during a task
+        // switch. Use of the G bit requires the page-global enable bit in CR4 to be set to 1 (CR4.PGE=1). See
+        // “Global Pages” on page 158 for more information on the global-page mechanism.
+        const G = bit!(8);
+        // Page-Attribute Table
+        // This bit is only present in the lowest level of the page-translation
+        // hierarchy, as follows:
+        // • If the lowest level is a PTE (PDE.PS=0), PAT occupies bit 7.
+        // • If the lowest level is a PDE (PDE.PS=1) or PDPE (PDPE.PS=1), PAT occupies bit 12.
+        const PAT = bit!(12);
         // No Execute
         // When the NX bit
         // is cleared to 0, code can be executed from the mapped physical pages. When the NX bit is set to 1,
@@ -280,15 +298,15 @@ bitflags! {
     }
 }
 
-const NUM_PTE_ENTRIES: usize = 512;
+const NUM_PT_ENTRIES: usize = 512;
 
-/// Page Table Structure for all hierarchy levels.
+/// Page Table Structure for Pages
 ///
 /// For further information on the paging structures refer to [5.3.3 4-Kbyte Page Translation](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=205) and their
 /// Field Definitions [5.4.1 Field Definitions](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf#page=215)
 #[repr(transparent)]
-pub struct PTETable {
-    pub entries: [PTEntry; NUM_PTE_ENTRIES],
+pub struct PTable {
+    pub entries: [PTEntry; NUM_PT_ENTRIES],
 }
 
 /// PML1 Entry
