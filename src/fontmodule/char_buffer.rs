@@ -3,7 +3,7 @@ use core::fmt;
 use limine::framebuffer::Framebuffer;
 
 use crate::font;
-use crate::font::Font;
+use crate::font::PSFFont;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
@@ -22,7 +22,7 @@ pub struct CharBuffer<'a, 'b> {
     color: Color,
     caret: u32,
     prev_caret: u32,
-    font: Font<'b>,
+    font: PSFFont<'b>,
 }
 
 unsafe impl<'a, 'b> Sync for CharBuffer<'a, 'b> {}
@@ -36,7 +36,7 @@ impl<'a, 'b> CharBuffer<'a, 'b> {
         character_height_px: u32,
         character_width_px: u32,
         chars_per_row: u32,
-        font: Font<'b>,
+        font: PSFFont<'b>,
     ) -> Self {
         Self {
             color,

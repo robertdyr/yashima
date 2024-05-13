@@ -88,7 +88,25 @@ impl UnicodeTable {
     }
 }
 
-pub struct Font<'a> {
+
+pub unsafe fn from_file<'a>() -> PSFFont<'a> {
+    let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
+    let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
+
+    let psf_header = PsfHeader::new(start);
+    let bitmap_table = BitmapTable::new(start + psf_header.headersize as usize, psf_header.numglpyh as usize);
+    let unicode_table_start =
+        start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
+    let unicode_table = UnicodeTable::new(unicode_table_start, end - unicode_table_start);
+    PSFFont::new(
+        psf_header.height,
+        psf_header.width,
+        bitmap_table,
+        unicode_table,
+    )
+}
+
+pub struct PSFFont<'a> {
     // maps unicode to Bitmap. unicode is index into BitmapTable
     bitmap_table: BitmapTable<'a>,
     // maps unicode to index into `bitmap_table` for the glyph
@@ -97,31 +115,14 @@ pub struct Font<'a> {
     width_px: u32,
 }
 
-impl<'a> Font<'a> {
-    pub unsafe fn from_file() -> Self {
-        let start = &_binary_Uni3_TerminusBold32x16_psf_start as *const u8 as usize;
-        let end = &_binary_Uni3_TerminusBold32x16_psf_end as *const u8 as usize;
-
-        let psf_header = PsfHeader::new(start);
-        let bitmap_table = BitmapTable::new(start + psf_header.headersize as usize, psf_header.numglpyh as usize);
-        let unicode_table_start =
-            start + psf_header.headersize as usize + (psf_header.bytesperglyph * 512) as usize;
-        let unicode_table = UnicodeTable::new(unicode_table_start, end - unicode_table_start);
-        Font::new(
-            psf_header.height,
-            psf_header.width,
-            bitmap_table,
-            unicode_table,
-        )
-    }
-
+impl<'a> PSFFont<'a> {
     pub fn new(
         height_px: u32,
         width_px: u32,
         bitmap_table: BitmapTable<'a>,
         unicode_table: UnicodeTable,
     ) -> Self {
-        Font {
+        PSFFont {
             height_px,
             width_px,
             bitmap_table,

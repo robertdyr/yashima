@@ -5,26 +5,25 @@
 #![feature(strict_provenance)]
 
 use core::panic::PanicInfo;
-use core::slice;
 
 use lazy_static::lazy_static;
+use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
-use limine::memory_map::EntryType;
 use limine::paging::Mode;
 use limine::request::{
     FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest, StackSizeRequest,
 };
-use limine::BaseRevision;
 use spin::Mutex;
-use x86::bits64::paging;
-use x86::bits64::paging::{PDEntry, PDPTEntry, PML4Entry, PTEntry, PML4};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 use fontmodule::char_buffer::{CharBuffer, Color};
 use fontmodule::font;
 
-use crate::arch::x86_64::control::{Cr3, Cr4};
-use crate::arch::x86_64::cpuid::CpuId;
+use crate::arch::x86_64::control::Cr3;
+use crate::arch::x86_64::paging::{
+    PDPTable, PDTable, PhysAddr, PML4Table, PTable,
+};
+use crate::bit_utils::BitRange;
 
 // extern crate rlibc;
 // extern crate alloc;
@@ -81,11 +80,6 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
         *element = value;
     }
 }
-
-use crate::arch::x86_64::paging::{
-    PDFlags, PDPFlags, PDPTable, PDTable, PML4Flags, PML4Table, PTable, PTFlags, PhysAddr,
-};
-use crate::bit_utils::BitRange;
 
 unsafe fn read_pml4table(hhdm_offset: usize, table_phys_addr: usize) -> &'static PML4Table {
     let ptr = hhdm_offset as *const u8;
@@ -232,7 +226,7 @@ pub fn init_idt() {
 
 lazy_static! {
     static ref CHARBUFFER: Mutex<CharBuffer<'static, 'static>> = unsafe {
-        let font = font::Font::from_file();
+        let font = font::from_file();
         let framebuffer: Framebuffer = FRAMEBUFFER_REQUEST
             .get_response()
             .unwrap()
