@@ -83,7 +83,7 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
 }
 
 use crate::arch::x86_64::paging::{
-    PDETable, PDFlags, PDPETable, PDPFlags, PML4Flags, PML4Table, PTETable, PTFlags, PhysAddr,
+    PDFlags, PDPFlags, PDPTable, PDTable, PML4Flags, PML4Table, PTable, PTFlags, PhysAddr,
 };
 use crate::bit_utils::BitRange;
 
@@ -145,13 +145,13 @@ pub extern "C" fn main() -> ! {
 
                 pdp_tables_count = pdp_tables_count + 1;
                 let adr = entry.get_phys_addr();
-                let pdpe_table = resolve_hhdm::<PDPETable>(&adr, hhdm_offset);
+                let pdpe_table = resolve_hhdm::<PDPTable>(&adr, hhdm_offset);
 
                 for entry in pdpe_table.entries {
                     if entry.is_present() {
                         pd_tables_count = pd_tables_count + 1;
                         let adr = entry.get_phys_addr();
-                        let pde_table = resolve_hhdm::<PDETable>(&adr, hhdm_offset);
+                        let pde_table = resolve_hhdm::<PDTable>(&adr, hhdm_offset);
                         if entry.0 & 1 << 7 != 0 {
                             panic!("should always be 0");
                         }
@@ -166,7 +166,7 @@ pub extern "C" fn main() -> ! {
                                     small_4kb_pages = small_4kb_pages + 1;
 
                                     let adr = entry.get_phys_addr();
-                                    let pte_table = resolve_hhdm::<PTETable>(&adr, hhdm_offset);
+                                    let pte_table = resolve_hhdm::<PTable>(&adr, hhdm_offset);
                                     for entry in pte_table.entries {
                                         if entry.is_present() {
                                             pages_count = pages_count + 1;
@@ -204,10 +204,12 @@ fn panic(info: &PanicInfo) -> ! {
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     loop {}
 }
+
 extern "x86-interrupt" fn err_code(stack_frame: InterruptStackFrame, err_code: u64) {
     println!("err");
     loop {}
 }
+
 extern "x86-interrupt" fn page_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
