@@ -4,29 +4,29 @@
 #![feature(allocator_api)]
 #![feature(strict_provenance)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
+use core::alloc::{Allocator, GlobalAlloc};
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
-use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::paging::Mode;
 use limine::request::{
     FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest, StackSizeRequest,
 };
+use limine::BaseRevision;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 use fontmodule::char_buffer::{CharBuffer, Color};
 use fontmodule::font;
 
-use crate::arch::x86_64::control::Cr3;
-use crate::arch::x86_64::paging::{
-    PDPTable, PDTable, PhysAddr, PML4Table, PTable,
-};
+use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
+use crate::mem::bootstrap_allocator::{BootstrapAllocator, DummyAlloc};
 
-// extern crate rlibc;
-// extern crate alloc;
 mod arch;
 mod bit_utils;
 mod fontmodule;
@@ -61,6 +61,9 @@ pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
     }
 }
 
+#[global_allocator]
+static GLOBAL: DummyAlloc = DummyAlloc;
+
 #[no_mangle]
 pub extern "C" fn memcmp(
     a: *const u8,
@@ -81,103 +84,24 @@ pub extern "C" fn memset(slice: *mut u8, slice_len: usize, value: u8) {
     }
 }
 
-unsafe fn read_pml4table(hhdm_offset: usize, table_phys_addr: usize) -> &'static PML4Table {
-    let ptr = hhdm_offset as *const u8;
-    let virt_table_addr =
-        unsafe { ptr.offset((table_phys_addr << 12) as isize) } as *const PML4Table;
-    let adr = virt_table_addr as usize;
-    println!("virt adr: {adr:064b}   {adr:x}");
-    let virt_table_own = &*virt_table_addr;
-    virt_table_own
-}
-
 #[no_mangle]
 pub extern "C" fn main() -> ! {
     unsafe {
         core::ptr::read_volatile(STACK_SIZE_REQUEST.get_response().unwrap());
         let mmap = MEMORY_MAP_REQUEST.get_response().unwrap();
+        let _mode = PAGE_MODE_REQUEST.get_response().unwrap();
+        let hhdm_offset = HHDM_REQUEST.get_response().unwrap();
+
         let (phys_range, virt_range) = arch::x86_64::cpuid::get_addr_sizes();
+        let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
         // alloc::boxed::Box::new_in()
+        // let mut fun: Vec<u64, BootstrapAllocator> = Vec::with_capacity_in(10, b_alloc);
+        let mut fun: Vec<u64, BootstrapAllocator> = Vec::new_in(b_alloc);
+        fun.push(7);
+
+        println!("{:?}", fun.len());
         // println!("phys_range {phys_range}");
         // println!("virt_range {virt_range}");
-        let _mode = PAGE_MODE_REQUEST.get_response().unwrap();
-        let hhdm_offset = HHDM_REQUEST.get_response().unwrap().offset();
-
-        let c3 = x86::controlregs::cr3();
-
-        let cr3 = Cr3::read_from();
-
-        let base_adr_pml4_x86 = c3.bit_range(12..52);
-
-        let phys_base_adr = cr3.get_base_addr();
-        let pml4_phys_adr = PhysAddr::new(phys_base_adr);
-
-        let mut pages_count: u64 = 0;
-        let mut pt_tables_count: u64 = 0;
-        let mut pd_tables_count: u64 = 0;
-        let mut pdp_tables_count: u64 = 0;
-
-        let mut large_2mb_pages: u64 = 0;
-        let mut small_4kb_pages: u64 = 0;
-
-        let mut first_non_p_page = false;
-
-        let mut page_until_first_non_present = 0;
-
-        let pml4table = resolve_hhdm::<PML4Table>(&pml4_phys_adr, hhdm_offset);
-
-        // let o = 0xffff800100000000;
-        let o: usize = 0xffff800010000000;
-        let ptr = o as *const u8;
-        let idk = *ptr;
-        let mut phys_adr_last_mapped_page: u64 = 0;
-
-        println!(" idk {idk} ");
-        for (i, entry) in pml4table.entries.iter().enumerate() {
-            if entry.is_present() && i == 256 {
-                println!(" i: {:x} f: {:064b}", 256, entry.0);
-
-                pdp_tables_count = pdp_tables_count + 1;
-                let adr = entry.get_phys_addr();
-                let pdpe_table = resolve_hhdm::<PDPTable>(&adr, hhdm_offset);
-
-                for entry in pdpe_table.entries {
-                    if entry.is_present() {
-                        pd_tables_count = pd_tables_count + 1;
-                        let adr = entry.get_phys_addr();
-                        let pde_table = resolve_hhdm::<PDTable>(&adr, hhdm_offset);
-                        if entry.0 & 1 << 7 != 0 {
-                            panic!("should always be 0");
-                        }
-
-                        for entry in pde_table.entries {
-                            if entry.is_present() {
-                                pt_tables_count = pt_tables_count + 1;
-                                if entry.maps_large_page() {
-                                    large_2mb_pages = large_2mb_pages + 1;
-                                    println!(" x: {:x}", entry.get_phys_addr().0)
-                                } else {
-                                    small_4kb_pages = small_4kb_pages + 1;
-
-                                    let adr = entry.get_phys_addr();
-                                    let pte_table = resolve_hhdm::<PTable>(&adr, hhdm_offset);
-                                    for entry in pte_table.entries {
-                                        if entry.is_present() {
-                                            pages_count = pages_count + 1;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        println!(" total_pde_c: {pt_tables_count}");
-        println!(" 2mb_pages_c: {large_2mb_pages}");
-        println!(" 4kb_pages_c: {small_4kb_pages}");
-        // println!(" pt_tabs_c: {pt_tables_count}");
-        // println!(" pages_c: {pages_count}");
     }
     loop {}
 }

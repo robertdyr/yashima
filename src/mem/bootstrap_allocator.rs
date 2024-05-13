@@ -1,12 +1,15 @@
-use crate::bit_utils::AlignmentError;
-use core::alloc::{AllocError, Layout};
+use core::alloc::{AllocError, GlobalAlloc, Layout};
 use core::ptr::NonNull;
+
 use limine::memory_map;
 use limine::response::{HhdmResponse, MemoryMapResponse};
 
-fn walk_page() {}
+use crate::bit_utils::AlignmentError;
 
-fn bootstrap_alloc(mm: &MemoryMapResponse) {
+pub fn init_bootstrap_alloc(
+    mm: &MemoryMapResponse,
+    hhdm_offset_response: &HhdmResponse,
+) -> BootstrapAllocator {
     // the goal is to have a variable sized bitmap that tracks the free physical pages, that the sys
     // allocator can reference. since we do not know the size of the bitmap at compile time, we
     // also do not know the amount of pages required to map the bitmap at compile time.
@@ -25,37 +28,21 @@ fn bootstrap_alloc(mm: &MemoryMapResponse) {
     // per byte). After the bootstrapping the bitmap can be copied/remapped onto the real heap and
     // the bootstrap heap can be repurposed/thrown back into the pool of free pages.
 
-    // to map 68Mb we need 16384 PTE Entries. this means we need to allocate 32 PTETables.
-    // we also require an additional PDETable for the unlikely event of an overflow of the first
-    // PDETable. in total we need 33 additional paging structures for our fixed sized 68Mb Heap.
-    // each one is 4Kb physical memory, total memory: 33 * 4096 = 135168.
+    // limine sets up a 4Gb direct map with the offset of the hhdm_offset_response
+    // since it is a direct map we know that free phsyical pages within the 4Gb direct map
+    // respond to free addresses in the virtual address space.
 
-    // to allocate the paging structurs we first have to find the block of 135168 page aligned
-    // bytes. here we can place the paging structures. however in order to even mutate any
-    // bytes, these bytes have to be mapped into virtual address space as well.
-    // and this is where it gets annyoing. i do not know if this space is already mapped by limine,
-    // if its partly mapped or if its not mapped at all. the memory map only tells me free
-    // pages, not if they are mapped into addresse space afaik. the document suggests that the 4 GB
-    // are direct mapped.
-    let start_ptr = find_memblock(33 * PAGE_SIZE, mm, PAGE_SIZE)
-        .unwrap_or_else(|| panic!("couldn't find space for bootstrap heap!"));
     const BOOTSTRAP_HEAP_SIZE: usize = 1 << 26;
-    const PAGE_SIZE: usize = 4096;
 
-    // first we need to find 68Mb worth of free pages (shouldn't be too hard at this point), and map
-    // them into our virtual address space. for convenience im looking for a continues block of
-    // memory. this makes it easier to mark the pages that are used up by in the bitmap itself
-    // after we created the bitmap.
-
-    // since limine sets up a higher half kernel, with a higher half direct map, we can be sure that
-    // the first free 68Mb pages can be mapped with hhdm offset without collision with kernel
-    // text,data or stack.
-    let start_ptr = find_memblock(BOOTSTRAP_HEAP_SIZE, mm, PAGE_SIZE)
+    let start_ptr = find_memblock(BOOTSTRAP_HEAP_SIZE, mm.entries(), 1)
         .unwrap_or_else(|| panic!("couldn't find space for bootstrap heap!"));
+    let hhdm_start_ptr = unsafe { start_ptr.offset(hhdm_offset_response.offset() as isize) };
+
+    BootstrapAllocator::new(hhdm_start_ptr, BOOTSTRAP_HEAP_SIZE)
 }
 
-fn find_memblock(size: usize, mm: &MemoryMapResponse, align: usize) -> Option<*mut u8> {
-    for entry in mm.entries().iter() {
+fn find_memblock(size: usize, mm_entries: &[&memory_map::Entry], align: usize) -> Option<*mut u8> {
+    for entry in mm_entries.iter() {
         let entry_base = entry.base as *const u8;
 
         // Calculate the alignment offset to the next 4KB boundary
@@ -74,7 +61,7 @@ fn find_memblock(size: usize, mm: &MemoryMapResponse, align: usize) -> Option<*m
 
 /// Allocator which soles purpose is to allocate byte array for the PageFrameAllocator so we can
 /// write the real system allocator.
-struct BootstrapAllocator {
+pub struct BootstrapAllocator {
     start: *mut u8,
     size: usize,
 }
@@ -98,10 +85,9 @@ unsafe impl core::alloc::Allocator for BootstrapAllocator {
 
         unsafe {
             // checking if the there is enough space to hold the bitmap
-            if next_aligned_byte
-                .offset(min_req_bytes as isize)
-                .le(&self.start.offset(self.size as isize))
-            {
+            let highest_req_byte_addr = next_aligned_byte.offset(min_req_bytes as isize);
+            let highest_avail_byte_addr = self.start.offset(self.size as isize);
+            if highest_avail_byte_addr.le(&highest_req_byte_addr) {
                 return Err(AllocError);
             }
             let ptr = core::ptr::slice_from_raw_parts_mut(next_aligned_byte, min_req_bytes);
@@ -110,6 +96,18 @@ unsafe impl core::alloc::Allocator for BootstrapAllocator {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        // TODO im leaving this empty since we can just overwrite it
+    }
+}
+
+pub struct DummyAlloc;
+
+unsafe impl GlobalAlloc for DummyAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        todo!()
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         todo!()
     }
 }
