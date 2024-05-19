@@ -45,8 +45,7 @@ fn find_memblock(size: usize, mm_entries: &[&memory_map::Entry], align: usize) -
     for entry in mm_entries.iter() {
         let entry_base = entry.base as *const u8;
 
-        // Calculate the alignment offset to the next 4KB boundary
-        let align_offset = unsafe { entry_base.align_offset(align) };
+        let align_offset = entry_base.align_offset(align);
 
         let kb4_aligned_entry_base = unsafe { entry_base.add(align_offset) };
         let diff = align_offset;
@@ -96,18 +95,6 @@ unsafe impl core::alloc::Allocator for BootstrapAllocator {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        // TODO im leaving this empty since we can just overwrite it
-    }
-}
-
-pub struct DummyAlloc;
-
-unsafe impl GlobalAlloc for DummyAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        todo!()
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        todo!()
+        // im leaving this empty since we can just overwrite it
     }
 }

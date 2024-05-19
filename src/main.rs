@@ -6,17 +6,16 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use core::alloc::{Allocator, GlobalAlloc};
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
+use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::paging::Mode;
 use limine::request::{
     FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest, StackSizeRequest,
 };
-use limine::BaseRevision;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
@@ -25,7 +24,8 @@ use fontmodule::font;
 
 use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
-use crate::mem::bootstrap_allocator::{BootstrapAllocator, DummyAlloc};
+use crate::mem::bitmap::{Bitmap, create_bitmap};
+use crate::mem::DummyAlloc;
 
 mod arch;
 mod bit_utils;
@@ -92,14 +92,35 @@ pub extern "C" fn main() -> ! {
         let _mode = PAGE_MODE_REQUEST.get_response().unwrap();
         let hhdm_offset = HHDM_REQUEST.get_response().unwrap();
 
-        let (phys_range, virt_range) = arch::x86_64::cpuid::get_addr_sizes();
+        let entries = mmap.entries();
+
+        for e in entries {
+            if e.base == 0 {
+                println!("e: {:?} ", entries.first().unwrap().base);
+            }
+        }
+
         let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
         // alloc::boxed::Box::new_in()
         // let mut fun: Vec<u64, BootstrapAllocator> = Vec::with_capacity_in(10, b_alloc);
-        let mut fun: Vec<u64, BootstrapAllocator> = Vec::new_in(b_alloc);
-        fun.push(7);
+        // let mut fun: Vec<u64, BootstrapAllocator> = Vec::new_in(b_alloc);
+        // fun.push(7);
 
-        println!("{:?}", fun.len());
+        let mut bitmap_vec = create_bitmap(mmap.entries(), &b_alloc);
+        println!("size: {} ", bitmap_vec.len());
+        let bitmap = Bitmap::new(bitmap_vec);
+        let first = bitmap.0[0];
+        println!("first {first} ");
+        let page = bitmap.find_free_4kb_page();
+        match page {
+            None => {
+                println!("no page found");
+            }
+            Some(page) => {
+                println!("page: {:?}", page);
+            }
+        }
+
         // println!("phys_range {phys_range}");
         // println!("virt_range {virt_range}");
     }

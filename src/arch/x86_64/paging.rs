@@ -1,9 +1,10 @@
 use bitflags::bitflags;
 
+use crate::bit;
 use crate::bit_utils::BitRange;
-use crate::{bit, print};
+use crate::mem::page::PageSize;
 
-const KB4: usize = 0xFFF;
+const KB4: usize = PageSize::KB4 as usize;
 const PAGE_MASK_4KB: u64 = (usize::MAX & !KB4) as u64;
 
 pub struct PhysAddr(pub u64);
@@ -44,7 +45,7 @@ impl PML4Entry {
     }
 
     pub fn get_flags(&self) -> Option<PML4Flags> {
-        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 63);
+        let flags = self.0.bit_range(0..6) | (self.0 & bit!(63));
         PML4Flags::from_bits(flags)
     }
 
@@ -128,7 +129,7 @@ impl PDPEntry {
     }
 
     pub fn get_flags(&self) -> Option<PDPFlags> {
-        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 63);
+        let flags = self.0.bit_range(0..6) | (self.0 & bit!(63));
         PDPFlags::from_bits(flags)
     }
 
@@ -212,7 +213,7 @@ impl PDEntry {
     }
 
     pub fn get_flags(&self) -> Option<PDFlags> {
-        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 7) | (self.0 & 1 << 63);
+        let flags = self.0.bit_range(0..6) | (self.0 & 1 << 7) | (self.0 & bit!(63));
 
         PDFlags::from_bits(flags)
     }
@@ -320,7 +321,7 @@ impl PTEntry {
     }
 
     pub fn get_flags(&self) -> Option<PTFlags> {
-        let flags = self.0.bit_range(0..9) | (self.0 & 1 << 63);
+        let flags = self.0.bit_range(0..9) | (self.0 & bit!(63));
 
         PTFlags::from_bits(flags)
     }
