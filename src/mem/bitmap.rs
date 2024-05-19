@@ -16,8 +16,8 @@ impl<T: Allocator> Bitmap<T> {
     }
 
     pub fn find_free_4kb_page(&self) -> Option<Page> {
-        for (i, pagebyte) in self.0.iter().enumerate() {
-            if pagebyte != &u8::MAX {
+        for (i, &pagebyte) in self.0.iter().enumerate() {
+            if pagebyte != u8::MAX {
                 for bit in 0..8 {
                     if bit!(bit) & pagebyte == 0 {
                         let index = i * 8 + bit;
