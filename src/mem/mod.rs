@@ -2,6 +2,7 @@ use core::alloc::{GlobalAlloc, Layout};
 
 use limine::memory_map;
 
+use crate::mem::bitmap::Bitmap;
 use crate::mem::page::Page;
 use crate::print;
 
@@ -9,9 +10,17 @@ pub mod bitmap;
 pub mod bootstrap_allocator;
 pub(crate) mod page;
 
-pub struct DummyAlloc;
+pub struct KernelAlloc<'a> {
+    heap_adr: usize,
+    pub bitmap: Bitmap<'a>,
+}
 
-unsafe impl GlobalAlloc for DummyAlloc {
+impl<'a> KernelAlloc<'a> {
+    pub fn new(heap_adr: usize, bitmap: Bitmap<'a>) -> KernelAlloc<'a> {
+        KernelAlloc { heap_adr, bitmap }
+    }
+}
+unsafe impl<'a> GlobalAlloc for KernelAlloc<'a> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         todo!()
     }

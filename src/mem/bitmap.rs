@@ -8,10 +8,10 @@ use crate::{bit, println};
 use crate::mem::{calc_mem_available, PageFrameAllocator};
 use crate::mem::page::{calc_4kb_page_count, Page, PageSize};
 
-pub struct Bitmap<T: Allocator>(pub Vec<u8, T>);
+pub struct Bitmap<'a>(pub &'a mut [u8]);
 
-impl<T: Allocator> Bitmap<T> {
-    pub fn new(bitmap: Vec<u8, T>) -> Self {
+impl<'a> Bitmap<'a> {
+    pub fn new(bitmap: &'a mut [u8]) -> Self {
         Bitmap(bitmap)
     }
 
@@ -30,7 +30,7 @@ impl<T: Allocator> Bitmap<T> {
     }
 }
 
-impl<T: Allocator> PageFrameAllocator for Bitmap<T> {
+impl<'a> PageFrameAllocator for Bitmap<'a> {
     fn allocate_frame(&mut self) -> Option<Page> {
         todo!()
     }

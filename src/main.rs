@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+use alloc::vec::Vec;
 use core::alloc::{Allocator, GlobalAlloc};
 use core::panic::PanicInfo;
 
@@ -24,8 +25,8 @@ use fontmodule::font;
 
 use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
+use crate::mem::{DummyAlloc, KernelAlloc};
 use crate::mem::bitmap::{Bitmap, create_bitmap};
-use crate::mem::DummyAlloc;
 
 mod arch;
 mod bit_utils;
@@ -61,8 +62,14 @@ pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
     }
 }
 
+static mut dummy_bitmap: [u8; 0] = [];
+static mut permanentn_bitmap: Option<Vec<u8>> = None;
 #[global_allocator]
-static GLOBAL: DummyAlloc = DummyAlloc;
+static mut K_ALLOC: KernelAlloc = unsafe {
+    KernelAlloc {
+        bitmap: Bitmap(&mut dummy_bitmap),
+    }
+};
 
 #[no_mangle]
 pub extern "C" fn memcmp(
@@ -94,23 +101,27 @@ pub extern "C" fn main() -> ! {
 
         let entries = mmap.entries();
 
-        for e in entries {
-            if e.base == 0 {
-                println!("e: {:?} ", entries.first().unwrap().base);
-            }
+        let a = 0;
+        let ptr_a: *const usize = &a;
+        println!(" a1 {:x?} ", ptr_a);
+
+        let b = 0;
+        let ptr_b: *const usize = &b;
+        println!(" b1 {:x?} ", ptr_b);
+
+        if ptr_b.cmp(&ptr_a).is_lt() {
+            println!(" downwards ");
+        } else {
+            println!(" downwards ");
         }
 
-        let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
-        // alloc::boxed::Box::new_in()
-        // let mut fun: Vec<u64, BootstrapAllocator> = Vec::with_capacity_in(10, b_alloc);
-        // let mut fun: Vec<u64, BootstrapAllocator> = Vec::new_in(b_alloc);
-        // fun.push(7);
+        // stackcheck(ptr_a);
 
-        let mut bitmap_vec = create_bitmap(mmap.entries(), &b_alloc);
-        println!("size: {} ", bitmap_vec.len());
+        let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
+
+        let bitmap_vec = create_bitmap(mmap.entries(), &b_alloc);
+
         let bitmap = Bitmap::new(bitmap_vec);
-        let first = bitmap.0[0];
-        println!("first {first} ");
         let page = bitmap.find_free_4kb_page();
         match page {
             None => {
@@ -120,11 +131,19 @@ pub extern "C" fn main() -> ! {
                 println!("page: {:?}", page);
             }
         }
-
-        // println!("phys_range {phys_range}");
-        // println!("virt_range {virt_range}");
     }
     loop {}
+}
+
+fn stackcheck(ptra: *const usize) {
+    let a = 0;
+
+    let ptr_a: *const usize = &a;
+
+    let ptr_x = ptr_a as usize - ptra as usize;
+
+    println!(" a2 {:x?} ", ptr_a);
+    println!(" x: {:x?}", ptr_x);
 }
 
 unsafe fn resolve_hhdm<T>(addr: &PhysAddr, hhdm_offset: u64) -> &T {
