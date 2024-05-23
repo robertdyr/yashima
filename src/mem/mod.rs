@@ -11,15 +11,10 @@ pub mod bootstrap_allocator;
 pub(crate) mod page;
 
 pub struct KernelAlloc<'a> {
-    heap_adr: usize,
+    pub heap_adr: u64,
     pub bitmap: Bitmap<'a>,
 }
 
-impl<'a> KernelAlloc<'a> {
-    pub fn new(heap_adr: usize, bitmap: Bitmap<'a>) -> KernelAlloc<'a> {
-        KernelAlloc { heap_adr, bitmap }
-    }
-}
 unsafe impl<'a> GlobalAlloc for KernelAlloc<'a> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         todo!()

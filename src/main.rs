@@ -25,8 +25,9 @@ use fontmodule::font;
 
 use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
-use crate::mem::{DummyAlloc, KernelAlloc};
 use crate::mem::bitmap::{Bitmap, create_bitmap};
+use crate::mem::bootstrap_allocator::BootstrapAllocator;
+use crate::mem::KernelAlloc;
 
 mod arch;
 mod bit_utils;
@@ -63,10 +64,18 @@ pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
 }
 
 static mut dummy_bitmap: [u8; 0] = [];
-static mut permanentn_bitmap: Option<Vec<u8>> = None;
+// TODO
+// this is a crime. might as well just use rawpointers for the vec to avoud getting into nasty type
+// issues later on but i just wanna get on at this point
+// this all is just a fugazy, just a trick, to get the Allocator type out of the kernel allocator
+// struct. this way i can allocate the bitmap first via the bootstrap allocator and then have the
+// bitmap managed by the kernel allocator later itself by coping the contents into it.
+const HEAP_START: u64 = 0xfffff80000000000;
+static mut permanentn_bitmap: Option<Vec<u8, BootstrapAllocator>> = None;
 #[global_allocator]
 static mut K_ALLOC: KernelAlloc = unsafe {
     KernelAlloc {
+        heap_adr: HEAP_START,
         bitmap: Bitmap(&mut dummy_bitmap),
     }
 };
@@ -116,13 +125,15 @@ pub extern "C" fn main() -> ! {
         }
 
         // stackcheck(ptr_a);
+        {
+            let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
+            let mut bitmap_vec = create_bitmap(mmap.entries(), b_alloc);
 
-        let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
+            // let bitmap = Bitmap::new(&mut bitmap_vec);
+            K_ALLOC.bitmap.0 = permanentn_bitmap.insert(bitmap_vec);
+        }
 
-        let bitmap_vec = create_bitmap(mmap.entries(), &b_alloc);
-
-        let bitmap = Bitmap::new(bitmap_vec);
-        let page = bitmap.find_free_4kb_page();
+        let page = K_ALLOC.bitmap.find_free_4kb_page();
         match page {
             None => {
                 println!("no page found");

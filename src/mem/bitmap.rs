@@ -40,10 +40,7 @@ impl<'a> PageFrameAllocator for Bitmap<'a> {
     }
 }
 
-pub fn create_bitmap<'a, T: Allocator>(
-    entries: &[&memory_map::Entry],
-    allocator: &'a T,
-) -> Vec<u8, &'a T> {
+pub fn create_bitmap<'a, T: Allocator>(entries: &[&memory_map::Entry], allocator: T) -> Vec<u8, T> {
     let mem_available = calc_mem_available(entries);
     // each byte represents 8 pages.
     let bitmap_size = calc_4kb_page_count(mem_available) / 8;
