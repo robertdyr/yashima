@@ -1,9 +1,9 @@
-use crate::mem::page::{Page, PageSize};
 use crate::bit;
+use crate::mem::page::{Page, PageSize};
+use crate::mem::page_frame_allocator::PageFrameAllocator;
 use limine::memory_map;
 use limine::memory_map::EntryType;
 use limine::response::HhdmResponse;
-use crate::mem::page_frame_allocator::PageFrameAllocator;
 
 /// Finds the highest physical address in the phy memory map.
 /// Effectively evaluating the memory size of the system.
@@ -149,6 +149,13 @@ impl RawBitmap {
         *pagebyte_adr |= bit!(pagebit);
     }
 
+    unsafe fn set_pageidx_free(&mut self, pageidx: usize) {
+        let pagebyte_idx = pageidx / 8;
+        let pagebit = pageidx % 8;
+        let pagebyte_adr = self.start.offset(pagebyte_idx as isize) as *mut u8;
+        *pagebyte_adr &= !(bit!(pagebit));
+    }
+
     unsafe fn is_pageidx_free(&self, pageidx: usize) -> bool {
         let pagebyte_idx = pageidx / 8;
         let pagebit = pageidx % 8;
@@ -211,6 +218,19 @@ impl RawBitmap {
         }
         None
     }
+
+    pub unsafe fn free_page(&mut self, page: Page) {
+        let pageidx = page.start / PageSize::KB4 as usize;
+        self.set_pageidx_free(pageidx);
+    }
+
+    pub unsafe fn free_continues_pages(&mut self, first_page_start_adr: usize, pagescount: u64) {
+        for page in 0..pagescount {
+            let nth_page_start_adr = first_page_start_adr + (page * PageSize::KB4 as u64) as usize;
+            let pageidx = nth_page_start_adr / PageSize::KB4 as usize;
+            self.set_pageidx_free(pageidx);
+        }
+    }
 }
 
 impl PageFrameAllocator for RawBitmap {
@@ -222,12 +242,14 @@ impl PageFrameAllocator for RawBitmap {
         unsafe { self.allocate_continues_4kb_pages(count) }
     }
 
-    fn free_page(&mut self) {
-        todo!()
+    fn free_page(&mut self, page: Page) {
+        unsafe { self.free_page(page) }
     }
 
-    fn free_continues_pages(&mut self, count: u64) {
-        todo!()
+    fn free_continues_pages(&mut self, first_page_start_adr: usize, count: u64) {
+        unsafe {
+            self.free_continues_pages(first_page_start_adr, count);
+        }
     }
 }
 
@@ -238,7 +260,7 @@ fn pagekb4_from_index(index: usize) -> Page {
     }
 }
 
-pub fn is_page_entirely_free(page: &Page, entries: &[&memory_map::Entry]) -> bool {
+fn is_page_entirely_free(page: &Page, entries: &[&memory_map::Entry]) -> bool {
     let page_end = match page.size {
         PageSize::KB4 => page.start + PageSize::KB4 as usize,
         PageSize::MB2 => page.start + PageSize::MB2 as usize,

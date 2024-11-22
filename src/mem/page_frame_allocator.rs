@@ -7,9 +7,9 @@ pub trait PageFrameAllocator {
 
     fn request_continues_page(&mut self, count: u64) ->  Option<(usize, u64)>;
 
-    fn free_page(&mut self);
+    fn free_page(&mut self, page: Page);
 
-    fn free_continues_pages(&mut self, count: u64);
+    fn free_continues_pages(&mut self, first_page_start_adr: usize,  count: u64);
 }
 
 fn calc_mem_available(entries: &[&memory_map::Entry]) -> u64 {

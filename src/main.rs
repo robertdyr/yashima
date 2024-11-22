@@ -152,7 +152,7 @@ pub extern "C" fn main() -> ! {
         //         println!("page: {:?}", page);
         //     }
         // }
-        let page = K_ALLOC.bitmap.as_mut().unwrap().allocate_4kb_page();
+        let page = K_ALLOC.bitmap.as_mut().unwrap().allocate_continues_4kb_pages(4);
         match page {
             None => {
                 println!("no page found");
@@ -161,13 +161,23 @@ pub extern "C" fn main() -> ! {
                 println!("page: {:?}", page);
             }
         }
-        K_ALLOC.init_kernel_heap();
+        let pageu = page.unwrap();
+        let page = K_ALLOC.bitmap.as_mut().unwrap().allocate_continues_4kb_pages(4);
+        match page {
+            None => {
+                println!("no page found");
+            }
+            Some(page) => {
+                println!("page: {:?}", page);
+            }
+        }
+        // K_ALLOC.init_kernel_heap();
     }
-    let mut v = Vec::new();
-    v.push(4);
-    v.push(5);
+    // let mut v = Vec::new();
+    // v.push(4);
+    // v.push(5);
 
-    println!("vec {:?}", v);
+    // println!("vec {:?}", v);
     loop {}
 }
 
