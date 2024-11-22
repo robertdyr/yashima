@@ -1,6 +1,6 @@
-use crate::{bit, resolve_hhdm};
 use crate::arch::x86_64::control::Cr3;
-use crate::arch::x86_64::paging::{PDPTable, PDTable, PhysAddr, PML4Table, PTable};
+use crate::arch::x86_64::paging::{PDPTable, PDTable, PML4Table, PTable, PhysAddr};
+use crate::{bit, resolve_hhdm};
 
 #[derive(Copy, Clone, Debug)]
 pub enum PageSize {

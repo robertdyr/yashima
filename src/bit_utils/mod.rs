@@ -26,7 +26,7 @@ pub enum AlignmentError {
 pub(crate) fn find_next_aligned_byte(
     ptr: *const u8,
     align: usize,
-) -> Result<*mut u8, AlignmentError> {
+) -> Result<*const u8, AlignmentError> {
     if align == 0 || (align & (align - 1)) != 0 {
         // Return an error if alignment is not a power of two or is zero
         return Err(AlignmentError::InvalidAlignment);
@@ -39,7 +39,7 @@ pub(crate) fn find_next_aligned_byte(
     }
 
     // Calculate the new aligned address and return it
-    Ok(unsafe { (ptr as usize + offset) as *mut u8 })
+    Ok(unsafe { (ptr as usize + offset) as *const u8 })
 }
 
 #[macro_export]

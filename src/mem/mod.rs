@@ -1,34 +1,23 @@
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::GlobalAlloc;
 
 use limine::memory_map;
 
-use crate::mem::bitmap::Bitmap;
 use crate::mem::page::Page;
 use crate::print;
 
 pub mod bitmap;
-pub mod bootstrap_allocator;
 pub(crate) mod page;
+pub(crate) mod k_alloc;
 
-pub struct KernelAlloc<'a> {
-    pub heap_adr: u64,
-    pub bitmap: Bitmap<'a>,
-}
-
-unsafe impl<'a> GlobalAlloc for KernelAlloc<'a> {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        todo!()
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        todo!()
-    }
-}
 
 pub trait PageFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<Page>;
+    fn request_page(&mut self) -> Option<Page>;
+    
+    fn request_continues_page(&mut self, count: u64) ->  Option<(usize, u64)>;
 
-    fn deallocate_frame(&mut self);
+    fn free_page(&mut self);
+    
+    fn free_continues_pages(&mut self, count: u64);
 }
 
 fn calc_mem_available(entries: &[&memory_map::Entry]) -> u64 {

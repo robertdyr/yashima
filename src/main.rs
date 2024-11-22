@@ -11,12 +11,12 @@ use core::alloc::{Allocator, GlobalAlloc};
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
-use limine::BaseRevision;
 use limine::framebuffer::Framebuffer;
 use limine::paging::Mode;
 use limine::request::{
     FramebufferRequest, HhdmRequest, MemoryMapRequest, PagingModeRequest, StackSizeRequest,
 };
+use limine::BaseRevision;
 use spin::Mutex;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
@@ -25,9 +25,7 @@ use fontmodule::font;
 
 use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
-use crate::mem::bitmap::{Bitmap, create_bitmap};
-use crate::mem::bootstrap_allocator::BootstrapAllocator;
-use crate::mem::KernelAlloc;
+use crate::mem::k_alloc::KAlloc;
 
 mod arch;
 mod bit_utils;
@@ -51,6 +49,7 @@ pub const STACK_SIZE: u64 = 0x2000000;
 #[used]
 pub static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(STACK_SIZE);
 
+// contains the address blocks and their attributes in physical memory addresses
 #[used]
 pub static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 
@@ -63,20 +62,33 @@ pub extern "C" fn memcpy(dst: *mut u8, src: *const u8, n: usize) {
     }
 }
 
-static mut dummy_bitmap: [u8; 0] = [];
-// TODO
-// this is a crime. might as well just use rawpointers for the vec to avoud getting into nasty type
-// issues later on but i just wanna get on at this point
-// this all is just a fugazy, just a trick, to get the Allocator type out of the kernel allocator
-// struct. this way i can allocate the bitmap first via the bootstrap allocator and then have the
-// bitmap managed by the kernel allocator later itself by coping the contents into it.
-const HEAP_START: u64 = 0xfffff80000000000;
-static mut permanentn_bitmap: Option<Vec<u8, BootstrapAllocator>> = None;
+// static mut dummy_bitmap: [u8; 0] = [];
+// // TODO
+// // this is a crime. might as well just use rawpointers for the vec to avoud getting into nasty type
+// // issues later on but i just wanna get on at this point
+// // this all is just a fugazy, just a trick, to get the Allocator type out of the kernel allocator
+// // struct. this way i can allocate the bitmap first via the bootstrap allocator and then have the
+// // bitmap managed by the kernel allocator later itself by coping the contents into it.
+// const HEAP_START: u64 = 0xfffff80000000000;
+// static mut permanentn_bitmap: Option<Vec<u8, BootstrapAllocator>> = None;
+// #[global_allocator]
+// static mut K_ALLOC: KernelAlloc = unsafe {
+//     KernelAlloc {
+//         heap_adr: HEAP_START,
+//         bitmap: Bitmap(&mut dummy_bitmap),
+//     }
+// };
+
+const MB2: usize = 1 << 21;
+
+// initial allocator
+// will be filled once the page bitmap exists and the kernel heap address is known
 #[global_allocator]
-static mut K_ALLOC: KernelAlloc = unsafe {
-    KernelAlloc {
-        heap_adr: HEAP_START,
-        bitmap: Bitmap(&mut dummy_bitmap),
+static mut K_ALLOC: KAlloc = unsafe {
+    KAlloc {
+        heap_start_adr: None,
+        heap_size: MB2,
+        bitmap: None,
     }
 };
 
@@ -110,30 +122,36 @@ pub extern "C" fn main() -> ! {
 
         let entries = mmap.entries();
 
-        let a = 0;
-        let ptr_a: *const usize = &a;
-        println!(" a1 {:x?} ", ptr_a);
+        let raw_bitmap = mem::bitmap::RawBitmap::new(entries, hhdm_offset);
 
-        let b = 0;
-        let ptr_b: *const usize = &b;
-        println!(" b1 {:x?} ", ptr_b);
+        K_ALLOC.bitmap = Some(raw_bitmap);
 
-        if ptr_b.cmp(&ptr_a).is_lt() {
-            println!(" downwards ");
-        } else {
-            println!(" downwards ");
-        }
+        // let a = 0;
+        // let ptr_a: *const usize = &a;
+        // println!(" a1 {:x?} ", ptr_a);
+        //
+        // let b = 0;
+        // let ptr_b: *const usize = &b;
+        // println!(" b1 {:x?} ", ptr_b);
+        //
+        // if ptr_b.cmp(&ptr_a).is_lt() {
+        //     println!(" downwards ");
+        // } else {
+        //     println!(" downwards ");
+        // }
+        //
 
-        // stackcheck(ptr_a);
-        {
-            let b_alloc = mem::bootstrap_allocator::init_bootstrap_alloc(mmap, hhdm_offset);
-            let mut bitmap_vec = create_bitmap(mmap.entries(), b_alloc);
-
-            // let bitmap = Bitmap::new(&mut bitmap_vec);
-            K_ALLOC.bitmap.0 = permanentn_bitmap.insert(bitmap_vec);
-        }
-
-        let page = K_ALLOC.bitmap.find_free_4kb_page();
+        // let page = K_ALLOC.bitmap.allocate_continues_4kb_pages(4);
+        //
+        // match page {
+        //     None => {
+        //         println!("no page found");
+        //     }
+        //     Some(page) => {
+        //         println!("page: {:?}", page);
+        //     }
+        // }
+        let page = K_ALLOC.bitmap.as_mut().unwrap().allocate_4kb_page();
         match page {
             None => {
                 println!("no page found");
@@ -142,7 +160,13 @@ pub extern "C" fn main() -> ! {
                 println!("page: {:?}", page);
             }
         }
+        K_ALLOC.init_kernel_heap();
     }
+    let mut v = Vec::new();
+    v.push(4);
+    v.push(5);
+
+    println!("vec {:?}", v);
     loop {}
 }
 
