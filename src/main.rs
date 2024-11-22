@@ -25,6 +25,7 @@ use fontmodule::font;
 
 use crate::arch::x86_64::paging::PhysAddr;
 use crate::bit_utils::BitRange;
+use crate::mem::bitmap::RawBitmap;
 use crate::mem::k_alloc::KAlloc;
 
 mod arch;
@@ -84,7 +85,7 @@ const MB2: usize = 1 << 21;
 // initial allocator
 // will be filled once the page bitmap exists and the kernel heap address is known
 #[global_allocator]
-static mut K_ALLOC: KAlloc = unsafe {
+static mut K_ALLOC: KAlloc<RawBitmap> = unsafe {
     KAlloc {
         heap_start_adr: None,
         heap_size: MB2,

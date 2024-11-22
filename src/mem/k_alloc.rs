@@ -1,17 +1,18 @@
-use crate::mem::bitmap::RawBitmap;
 use crate::mem::page::PageSize;
 use core::alloc::{GlobalAlloc, Layout};
 use crate::bit_utils::AlignmentError;
+use crate::mem::page_frame_allocator::PageFrameAllocator;
 
-pub struct KAlloc {
+pub struct KAlloc<T: PageFrameAllocator> {
     pub heap_start_adr: Option<usize>,
     pub heap_size: usize,
-    pub bitmap: Option<RawBitmap>,
+    pub bitmap: Option<T>,
 }
 
-impl KAlloc {
+impl<T: PageFrameAllocator> KAlloc<T> {
     pub unsafe fn init_kernel_heap(&mut self) {
-        let (start_adr,_ ) = match  self.bitmap.as_mut().unwrap().allocate_continues_4kb_pages(((self.heap_size / PageSize::KB4 as usize) + 1) as u64) {
+        let pages_to_request = ((self.heap_size / PageSize::KB4 as usize) + 1) as u64;
+        let (start_adr,_ ) = match  self.bitmap.as_mut().unwrap().request_continues_page(pages_to_request) {
             Some(result) => result,
             None => panic!("not enough space for kernel heap. request smaller heap."),
         };
@@ -21,7 +22,7 @@ impl KAlloc {
 
 }
 
-unsafe impl GlobalAlloc for KAlloc {
+unsafe impl<T: PageFrameAllocator> GlobalAlloc for KAlloc<T> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let required_bytes = layout.size();
         let alignment = layout.align();

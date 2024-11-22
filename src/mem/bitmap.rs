@@ -1,13 +1,9 @@
-use alloc::vec::Vec;
-use core::alloc::Allocator;
-
-use crate::arch::x86_64::paging::PhysAddr;
-use crate::mem::page::{calc_4kb_page_count, Page, PageSize};
-use crate::mem::{calc_mem_available, PageFrameAllocator};
-use crate::{bit, print, println};
+use crate::mem::page::{Page, PageSize};
+use crate::bit;
 use limine::memory_map;
 use limine::memory_map::EntryType;
 use limine::response::HhdmResponse;
+use crate::mem::page_frame_allocator::PageFrameAllocator;
 
 /// Finds the highest physical address in the phy memory map.
 /// Effectively evaluating the memory size of the system.
@@ -223,7 +219,7 @@ impl PageFrameAllocator for RawBitmap {
     }
 
     fn request_continues_page(&mut self, count: u64) -> Option<(usize, u64)> {
-        todo!()
+        unsafe { self.allocate_continues_4kb_pages(count) }
     }
 
     fn free_page(&mut self) {
@@ -233,64 +229,6 @@ impl PageFrameAllocator for RawBitmap {
     fn free_continues_pages(&mut self, count: u64) {
         todo!()
     }
-}
-
-pub struct Bitmap<'a>(pub &'a mut [u8]);
-
-impl<'a> Bitmap<'a> {
-    pub fn new(bitmap: &'a mut [u8]) -> Self {
-        Bitmap(bitmap)
-    }
-
-    pub fn find_free_4kb_page(&self) -> Option<Page> {
-        for (i, &pagebyte) in self.0.iter().enumerate() {
-            if pagebyte != u8::MAX {
-                for bit in 0..8 {
-                    if bit!(bit) & pagebyte == 0 {
-                        let index = i * 8 + bit;
-                        return Some(pagekb4_from_index(index));
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-
-// impl<'a> PageFrameAllocator for Bitmap<'a> {
-//     fn request_page(&mut self) -> Option<Page> {
-//         todo!()
-//     }
-//
-//     fn free_page(&mut self) {
-//         todo!()
-//     }
-// }
-
-pub fn create_bitmap<'a, T: Allocator>(entries: &[&memory_map::Entry], allocator: T) -> Vec<u8, T> {
-    let mem_available = calc_mem_available(entries);
-    // each byte represents 8 pages.
-    let bitmap_size = calc_4kb_page_count(mem_available) / 8;
-    let mut bitmap_vec = Vec::with_capacity_in(bitmap_size as usize, allocator);
-    for _ in 0..bitmap_size {
-        bitmap_vec.push(0);
-    }
-
-    for pagebyte_index in 0..bitmap_vec.len() {
-        bitmap_vec[pagebyte_index] = set_used_page_bits(pagebyte_index, entries);
-    }
-    bitmap_vec
-}
-
-fn set_used_page_bits(pagebyte_index: usize, entries: &[&memory_map::Entry]) -> u8 {
-    let mut pagebyte = 0;
-    for bit in 0..8 {
-        let page = pagekb4_from_index(pagebyte_index * 8 + bit);
-        if !is_page_entirely_free(&page, entries) {
-            pagebyte |= bit!(bit);
-        }
-    }
-    pagebyte
 }
 
 fn pagekb4_from_index(index: usize) -> Page {
