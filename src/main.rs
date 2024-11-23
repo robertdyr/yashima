@@ -3,7 +3,7 @@
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
 #![feature(strict_provenance)]
-
+#![feature(pointer_is_aligned)]
 extern crate alloc;
 
 use alloc::vec::Vec;
@@ -90,6 +90,7 @@ static mut K_ALLOC: KAlloc<RawBitmap> = unsafe {
         heap_start_adr: None,
         heap_size: MB2,
         bitmap: None,
+        first_mem_block_node: core::ptr::null_mut(),
     }
 };
 
@@ -171,13 +172,24 @@ pub extern "C" fn main() -> ! {
                 println!("page: {:?}", page);
             }
         }
-        // K_ALLOC.init_kernel_heap();
+        K_ALLOC.init_kernel_heap();
     }
-    // let mut v = Vec::new();
-    // v.push(4);
-    // v.push(5);
+    {
+    let mut v = Vec::new();
+    v.push(4);
+    v.push(5);
 
-    // println!("vec {:?}", v);
+    println!("vec: {:?}", v);
+    println!("address of vec buffer: {:?}", v.as_ptr());
+        
+    }
+
+    let mut v2 = Vec::new();
+    v2.push(2);
+    v2.push(3);
+
+    println!("vec: {:?}", v2);
+    println!("address of vec buffer: {:?}", v2.as_ptr());
     loop {}
 }
 
